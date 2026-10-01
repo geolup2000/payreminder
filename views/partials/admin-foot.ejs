@@ -1,0 +1,12 @@
+    </div>
+    <% const activeSection = currentPath.startsWith('/admin/settings') ? 'settings' : currentPath.startsWith('/admin/services') ? 'services' : currentPath.startsWith('/admin/members') ? 'members' : currentPath.startsWith('/admin/payments') ? 'payments' : 'dashboard'; %>
+    <nav class="mobile-nav" aria-label="Navigare principală">
+      <a class="<%= activeSection === 'dashboard' ? 'active' : '' %>" href="/admin"><span>◫</span>Prezentare</a>
+      <a class="<%= activeSection === 'members' ? 'active' : '' %>" href="/admin/members"><span>♙</span>Utilizatori</a>
+      <a class="<%= activeSection === 'services' ? 'active' : '' %>" href="/admin/services"><span>▦</span>Servicii</a>
+      <a class="<%= activeSection === 'payments' ? 'active' : '' %>" href="/admin/payments"><span>↗</span>Plăți</a>
+      <a class="<%= activeSection === 'settings' ? 'active' : '' %>" href="/admin/settings"><span>⚙</span>Setări</a>
+    </nav>
+  </main>
+</div>
+<script src="/i18n.js"></script>

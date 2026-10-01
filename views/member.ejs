@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="<%= language %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title><%= member ? member.name + ' - plati lunare' : 'Pagina' %></title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon-192.png">
+<meta name="theme-color" content="#090d17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="member-page">
+<header class="member-topbar">
+  <a class="member-brand" href="/"><span class="brand-mark">p</span><span>pay<span>reminder</span></span></a>
+  <div class="member-period"><i></i><%= monthLabel %></div>
+</header>
+<main class="member-container">
+  <% if (error) { %>
+    <section class="member-error card">
+      <div class="member-error-mark">!</div>
+      <h1>Nu putem deschide pagina</h1>
+      <p><%= error %></p>
+      <a class="btn btn-gray" href="/">Înapoi la pagina principală</a>
+    </section>
+  <% } else { %>
+    <section class="member-welcome">
+      <div class="member-kicker"><span></span> PLĂȚI LUNARE</div>
+      <h1><%= language === 'en' ? 'Hello,' : 'Salut,' %> <%= member.name %>.</h1>
+      <% if (language === 'en') { %>
+        <p>You have <b><%= memberships.length %> <%= memberships.length === 1 ? 'subscription' : 'subscriptions' %></b> for <%= monthLabel %>. Choose a service to see the amount and report your payment.</p>
+      <% } else { %>
+        <p>Ai <b><%= memberships.length %> <%= memberships.length === 1 ? 'abonament' : 'abonamente' %></b> pentru <%= monthLabel %>. Alege un serviciu pentru a vedea suma și raporta plata.</p>
+      <% } %>
+    </section>
+
+    <% if (done) { %>
+      <div class="member-success"><span class="success-check">✓</span><div><b>Plata a fost raportată.</b><p>Administratorul o va verifica. Vei primi un email după confirmare.</p></div></div>
+    <% } %>
+
+    <section class="member-payments" aria-label="Abonamentele tale">
+      <% memberships.forEach((m) => { %>
+        <article class="member-payment-card <%= m.payment ? (m.payment.status === 'confirmed' ? 'is-confirmed' : 'is-pending') : '' %>">
+          <div class="payment-card-head">
+            <div class="service-identity">
+              <span class="service-monogram"><%= m.service.name.charAt(0).toUpperCase() %></span>
+              <div><h2><%= m.service.name %></h2><p>Plată lunară</p></div>
+            </div>
+            <div class="payment-amount"><span><%= formatMoney(m.amount, currency) %></span><small>pentru luna aceasta</small></div>
+          </div>
+
+          <% if (m.payment && m.payment.status === 'pending') { %>
+            <div class="payment-state state-pending"><span class="state-dot"></span><div><b>În verificare</b><span>Ai raportat plata pentru <%= monthLabel %>.</span></div></div>
+          <% } %>
+          <% if (m.payment && m.payment.status === 'confirmed') { %>
+            <div class="payment-state state-confirmed"><span class="state-dot">✓</span><div><b>Plată confirmată</b><span><%= m.payment.endMonth && m.payment.endMonth > m.payment.month ? `Ai plătit în avans pentru ${humanMonth(m.payment.month)} – ${humanMonth(m.payment.endMonth)}.` : `Ești la zi pentru ${monthLabel}.` %></span></div></div>
+          <% } %>
+
+          <% if (m.service.paymentUrl) { %>
+            <a class="payment-link" href="<%= m.service.paymentUrl %>" target="_blank" rel="noopener"><span>Deschide linkul de plată</span><span class="link-arrow" aria-hidden="true">↗</span></a>
+          <% } else { %>
+            <div class="payment-unavailable">Linkul de plată nu este configurat încă. Contactează administratorul.</div>
+          <% } %>
+
+          <% if (!m.payment || m.payment.status !== 'confirmed') { %>
+            <form class="payment-report-form" method="post" action="/p/<%= member.token %>/pay">
+              <input type="hidden" name="serviceId" value="<%= m.service.id %>">
+              <button class="btn btn-green btn-block" type="submit"><span class="report-check" aria-hidden="true">✓</span>Am plătit — raportează plata</button>
+            </form>
+          <% } %>
+          <p class="payment-footnote">Plata este verificată de administrator înainte de confirmare.</p>
+        </article>
+      <% }) %>
+    </section>
+    <footer class="member-footer"><span class="brand-mark">p</span><span>Plăți organizate cu PayReminder</span></footer>
+  <% } %>
+</main>
+<script src="/i18n.js"></script>
+<script src="/pwa.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "PayReminder",
+  "short_name": "PayReminder",
+  "description": "Reamintiri și plăți recurente, într-un singur loc.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090d17",
+  "theme_color": "#090d17",
+  "categories": ["productivity", "finance"],
+  "icons": [
+    {
+      "src": "/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

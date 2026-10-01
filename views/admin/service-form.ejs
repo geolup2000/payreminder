@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="<%= language %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title><%= service ? 'Editează serviciu' : 'Adaugă serviciu' %> - PayReminder</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon-192.png">
+<meta name="theme-color" content="#090d17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<%- include('../partials/admin-head', { currentPath: '/admin/services/new' }) %>
+
+  <div class="title"><%= service ? 'Editează: ' + service.name : 'Adaugă serviciu' %></div>
+  <p class="subtitle">Configureaza serviciul si linkul catre care vor fi indirectionati utilizatorii.</p>
+
+  <% if (error) { %>
+    <div class="alert alert-err"><%= error %></div>
+  <% } %>
+
+  <div class="card" style="max-width:560px">
+    <form method="post" action="<%= service ? '/admin/services/' + service.id : '/admin/services' %>">
+      <div class="form-group">
+        <label for="name">Nume serviciu</label>
+        <input type="text" id="name" name="name" required value="<%= service ? service.name : '' %>" placeholder="ex. Abonament online">
+      </div>
+      <div class="form-group">
+        <label for="paymentUrl">Link de plată</label>
+        <input type="url" id="paymentUrl" name="paymentUrl" value="<%= service ? (service.paymentUrl || '') : '' %>" placeholder="https://...">
+        <p class="muted" style="margin:6px 0 0">Opțional. Utilizatorii vor folosi linkul dacă este completat aici.</p>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="reminderDay">Ziua trimiterii</label>
+          <input type="number" id="reminderDay" name="reminderDay" min="1" max="31" step="1" required value="<%= service ? service.reminderDay : 10 %>">
+        </div>
+        <div class="form-group">
+          <label for="reminderHour">Ora trimiterii</label>
+          <input type="number" id="reminderHour" name="reminderHour" min="0" max="23" step="1" required value="<%= service ? service.reminderHour : 10 %>">
+        </div>
+      </div>
+      <p class="muted" style="margin:-6px 0 16px">Programul este specific acestui serviciu și folosește ora serverului.</p>
+      <div class="form-group form-check">
+        <input type="checkbox" id="active" name="active" <%= !service || service.active ? 'checked' : '' %>>
+        <label for="active" style="margin:0;color:var(--text)">Serviciu activ (utilizatorii primesc reamintiri)</label>
+      </div>
+      <div class="button-row">
+        <button class="btn btn-indigo" type="submit"><%= service ? 'Salvează' : 'Adaugă' %></button>
+        <a class="btn btn-gray" href="/admin/services">Anulează</a>
+      </div>
+    </form>
+  </div>
+
+  <% if (service) { %>
+  <div class="card">
+    <h3 style="margin-top:0">Utilizatori ai acestui serviciu</h3>
+    <div class="button-row">
+      <a class="btn btn-indigo" href="/admin/members/new?serviceId=<%= service.id %>">+ Adaugă utilizator</a>
+      <a class="btn btn-gray" href="/admin/members?serviceId=<%= service.id %>">Vezi utilizatorii asociati</a>
+    </div>
+  </div>
+  <% } %>
+<%- include('../partials/admin-foot', { currentPath: '/admin/services/new' }) %>
+<script src="/pwa.js" defer></script>
+</body>
+</html>

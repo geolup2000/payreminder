@@ -1,0 +1,19 @@
+<% const activeSection = currentPath.startsWith('/admin/settings') ? 'settings' : currentPath.startsWith('/admin/services') ? 'services' : currentPath.startsWith('/admin/members') ? 'members' : currentPath.startsWith('/admin/payments') ? 'payments' : 'dashboard'; %>
+<div class="app-shell">
+  <aside class="admin-sidebar">
+    <a class="brand" href="/admin"><span class="brand-mark">p</span><span>pay<span class="brand-light">reminder</span></span></a>
+    <div class="sidebar-caption">MENIU</div>
+    <nav class="sidebar-links" aria-label="Navigare principală">
+      <a class="nav-link <%= activeSection === 'dashboard' ? 'active' : '' %>" href="/admin"><span class="nav-icon">◫</span><span>Prezentare</span></a>
+      <a class="nav-link <%= activeSection === 'members' ? 'active' : '' %>" href="/admin/members"><span class="nav-icon">♙</span><span>Utilizatori</span></a>
+      <a class="nav-link <%= activeSection === 'services' ? 'active' : '' %>" href="/admin/services"><span class="nav-icon">▦</span><span>Servicii</span></a>
+      <a class="nav-link <%= activeSection === 'payments' ? 'active' : '' %>" href="/admin/payments"><span class="nav-icon">↗</span><span>Plăți</span></a>
+      <a class="nav-link <%= activeSection === 'settings' ? 'active' : '' %>" href="/admin/settings"><span class="nav-icon">⚙</span><span>Setări</span></a>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="sidebar-account"><span class="account-avatar">A</span><span><b>Administrator</b><small>Cont local</small></span></div>
+      <a class="logout-link" href="/admin/logout">Ieșire din cont <span>↗</span></a>
+    </div>
+  </aside>
+  <main class="workspace">
+    <div class="container">

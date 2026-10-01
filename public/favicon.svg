@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#283d68"/>
+      <stop offset="1" stop-color="#172747"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="58" height="58" rx="18" fill="url(#tile)" stroke="#536d9b" stroke-width="2"/>
+  <text x="32" y="46" text-anchor="middle" fill="#a8bcff" font-family="Inter,Arial,sans-serif" font-size="45" font-weight="700" letter-spacing="-3">p</text>
+</svg>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="<%= language %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Setări - PayReminder</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#090d17">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<%- include('../partials/admin-head', { currentPath: '/admin/settings' }) %>
+
+  <div class="title">Setări</div>
+  <p class="subtitle">Configurează limba aplicației și a emailurilor trimise membrilor.</p>
+
+  <% if (saved) { %><div class="alert alert-ok">Setările au fost salvate.</div><% } %>
+
+  <div class="card" style="max-width:560px">
+    <form method="post" action="/admin/settings">
+      <div class="form-group">
+        <label for="language">Limba aplicației</label>
+        <select id="language" name="language">
+          <option value="ro" <%= language === 'ro' ? 'selected' : '' %>>Română</option>
+          <option value="en" <%= language === 'en' ? 'selected' : '' %>>English</option>
+        </select>
+        <p class="muted" style="margin:6px 0 0">Se aplică interfeței aplicației și emailurilor de reamintire și confirmare.</p>
+      </div>
+      <div class="button-row"><button class="btn btn-indigo" type="submit">Salvează setările</button></div>
+    </form>
+  </div>
+
+<%- include('../partials/admin-foot', { currentPath: '/admin/settings' }) %>
+</body>
+</html>

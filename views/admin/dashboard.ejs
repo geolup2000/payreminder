@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="<%= language %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Prezentare - PayReminder</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon-192.png">
+<meta name="theme-color" content="#090d17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<%- include('../partials/admin-head', { currentPath: '/admin' }) %>
+
+  <div class="dashboard-heading">
+    <div><div class="title"><%= language === 'en' ? 'Dashboard' : 'Prezentare' %></div><p class="subtitle"><%= language === 'en' ? 'Payment overview for' : 'Situația plăților pentru' %> <%= monthLabel %>.</p></div>
+  </div>
+
+  <% if (msg) { %>
+    <div class="alert alert-ok">✅ <%= msg %></div>
+  <% } %>
+  <% if (err) { %>
+    <div class="alert alert-err"><%= err %></div>
+  <% } %>
+
+  <form class="row filter-row" method="get" action="/admin">
+    <div class="form-group" style="margin:0;min-width:240px;flex:1">
+      <label for="service-filter">Serviciu</label>
+      <select id="service-filter" name="serviceId">
+        <option value="">Toate serviciile</option>
+        <% services.forEach((service) => { %>
+          <option value="<%= service.id %>" <%= selectedServiceId === service.id ? 'selected' : '' %>><%= service.name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button class="btn btn-gray" type="submit">Filtrează</button>
+  </form>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="v"><%= stats.activeMembers %></div><div class="l">abonamente active</div></div>
+    <div class="stat"><div class="v"><%= stats.confirmed %></div><div class="l">plăți confirmate</div></div>
+    <div class="stat"><div class="v"><%= stats.pending %></div><div class="l">în verificare</div></div>
+    <div class="stat">
+    <div class="v"><%= stats.totalPaid.toFixed(2).replace('.', ',') %> <span class="stat-currency"><%= currency %></span></div>
+      <div class="l">total încasat</div>
+    </div>
+  </div>
+
+  <div class="card dashboard-list">
+    <div class="row">
+      <div><h3 style="margin:0">Plățile utilizatorilor</h3><p class="muted" style="margin:3px 0 0">Statusul abonamentelor pentru luna selectată</p></div>
+      <div class="grow"></div>
+      <form class="button-row" method="post" action="/admin/remind">
+        <input type="hidden" name="serviceId" value="<%= selectedServiceId %>">
+        <button class="btn btn-indigo btn-sm" type="submit">📧 Trimite reamintiri acum</button>
+      </form>
+    </div>
+
+    <% if (rows.length === 0) { %>
+      <p class="muted" style="margin-top:14px">Nu exista abonamente pentru acest filtru. <a href="/admin/members/new">Adauga primul utilizator</a>.</p>
+    <% } else { %>
+      <table class="responsive-table dashboard-table" style="margin-top:8px">
+        <thead>
+          <tr><th>Utilizator</th><th>Serviciu</th><th>Suma</th><th>Status <%= monthLabel %></th><th>Acțiuni</th></tr>
+        </thead>
+        <tbody>
+        <% rows.forEach((row) => { %>
+          <tr>
+            <td data-label="Utilizator">
+              <b><%= row.member.name %></b>
+              <div class="muted"><%= row.member.email %></div>
+            </td>
+            <td data-label="Serviciu"><%= row.service ? row.service.name : '—' %></td>
+            <td data-label="Suma"><%= row.amount.toFixed(2).replace('.', ',') %> <%= currency %></td>
+            <td data-label="Status">
+              <% if (!row.payment) { %>
+                <span class="badge badge-gray">neplătit</span>
+              <% } else if (row.payment.status === 'confirmed') { %>
+                <span class="badge badge-green"><%= row.paidInAdvance ? 'plătit în avans ✓' : 'plătit ✓' %></span>
+              <% } else { %>
+                <span class="badge badge-amber">în verificare</span>
+              <% } %>
+            </td>
+            <td class="right" data-label="Acțiuni">
+              <div class="table-actions">
+                <form method="post" action="/admin/remind">
+                  <input type="hidden" name="memberId" value="<%= row.member.id %>">
+                  <input type="hidden" name="serviceId" value="<%= row.serviceId %>">
+                  <button class="btn btn-gray btn-sm" type="submit">reaminteste</button>
+                </form>
+                <% if (row.payment && row.payment.status === 'pending') { %>
+                <form method="post" action="/admin/payments/<%= row.payment.id %>/confirm">
+                  <input type="hidden" name="returnTo" value="/admin">
+                  <button class="btn btn-green btn-sm" type="submit">confirmă</button>
+                </form>
+                <% } %>
+                <a class="btn btn-gray btn-sm" href="/admin/members/<%= row.member.id %>">editează</a>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0"><%= language === 'en' ? 'Manual confirmation' : 'Confirmare manuală' %></h3>
+    <% if (language === 'en') { %>
+      <p class="muted">When a payment is reported, check the transaction using the service payment link, then confirm it on the <a href="/admin/payments">Payments</a> page. The member will automatically receive a confirmation email.</p>
+    <% } else { %>
+      <p class="muted">Când primești o raportare de plată, verifică tranzacția folosind linkul de plată al serviciului, apoi confirm-o în pagina <a href="/admin/payments">Plăți</a>. Utilizatorul primește automat un email de confirmare.</p>
+    <% } %>
+  </div>
+
+<%- include('../partials/admin-foot', { currentPath: '/admin' }) %>
+<script src="/pwa.js" defer></script>
+</body>
+</html>

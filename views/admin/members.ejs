@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="<%= language %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Utilizatori - PayReminder</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon-192.png">
+<meta name="theme-color" content="#090d17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<%- include('../partials/admin-head', { currentPath: '/admin/members' }) %>
+
+  <div class="row">
+    <div>
+      <div class="title">Utilizatori</div>
+      <p class="subtitle">Persoanele asociate serviciilor tale.</p>
+    </div>
+    <div class="grow"></div>
+    <a class="btn btn-indigo" href="/admin/members/new<%= selectedServiceId ? '?serviceId=' + encodeURIComponent(selectedServiceId) : '' %>">+ Adaugă utilizator</a>
+  </div>
+
+  <% if (msg) { %>
+    <div class="alert alert-ok">✅ <%= msg %></div>
+  <% } %>
+  <% if (err) { %>
+    <div class="alert alert-err"><%= err %></div>
+  <% } %>
+
+  <form class="row filter-row" method="get" action="/admin/members">
+    <div class="form-group" style="margin:0;min-width:240px;flex:1">
+      <label for="service-filter">Serviciu</label>
+      <select id="service-filter" name="serviceId">
+        <option value="">Toate serviciile</option>
+        <% services.forEach((service) => { %>
+          <option value="<%= service.id %>" <%= selectedServiceId === service.id ? 'selected' : '' %>><%= service.name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button class="btn btn-gray" type="submit">Filtrează</button>
+  </form>
+
+  <div class="card">
+    <% if (members.length === 0) { %>
+      <p class="muted">Niciun utilizator pentru acest filtru. <a href="/admin/members/new">Adaugă primul utilizator</a>.</p>
+    <% } else { %>
+      <table class="responsive-table members-list-table">
+        <thead>
+          <tr><th>Utilizator</th><th>Serviciu</th><th>Email</th><th>Suma</th><th>Activ</th><th>Link personal</th><th>Acțiuni</th></tr>
+        </thead>
+        <tbody>
+        <% members.forEach((m) => { %>
+          <tr>
+            <td data-label="Utilizator"><b><%= m.name %></b></td>
+            <td data-label="Serviciu">
+              <% if (m.memberships && m.memberships.length) { %>
+                <%= m.memberships.map((membership) => {
+                  const svc = m.membershipServices.find((entry) => entry.service.id === membership.serviceId);
+                  return svc ? svc.service.name : membership.serviceId;
+                }).join(', ') %>
+              <% } else { %>
+                —
+              <% } %>
+            </td>
+            <td class="muted" data-label="Email"><%= m.email %></td>
+            <td data-label="Suma">
+              <b><%= (m.totalAmount || 0).toFixed(2).replace('.', ',') + ' ' + config.currency %></b>
+              <% if (m.memberships.length > 1) { %>
+                <div class="muted"><%= m.memberships.map((membership) => membership.amount.toFixed(2).replace('.', ',')).join(' + ') %></div>
+              <% } %>
+            </td>
+            <td data-label="Activ"><%= m.active ? '✓' : '—' %></td>
+            <td data-label="Link personal">
+              <div class="table-actions">
+                <a class="btn btn-gray btn-sm" href="/p/<%= m.token %>" target="_blank">deschide</a>
+                <button class="btn btn-gray btn-sm" type="button" onclick="copyLink('<%= m.token %>', this)">copiază link</button>
+              </div>
+            </td>
+            <td class="right" data-label="Acțiuni">
+              <div class="table-actions">
+                <a class="btn btn-gray btn-sm" href="/admin/members/<%= m.id %>">editează</a>
+                <form method="post" action="/admin/members/<%= m.id %>/delete" onsubmit="return confirm('Ștergi pe <%= m.name %>? Istoricul platilor ramane.')">
+                  <button class="btn btn-danger btn-sm" type="submit">șterge</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0"><%= language === 'en' ? 'Personal link' : 'Linkul personal' %></h3>
+    <p class="muted">
+      <% if (language === 'en') { %>
+        Each member has a unique link, included in the monthly reminder email. The link looks like <code>/p/&lt;token&gt;</code>.
+      <% } else { %>
+        Fiecare utilizator are un link unic, trimis in emailul lunar de reamintire.
+        Linkul are forma <code>/p/&lt;token&gt;</code>.
+      <% } %>
+    </p>
+  </div>
+
+  <script>
+    function copyLink(token, btn) {
+      var url = window.location.origin + '/p/' + token;
+      var copiedLabel = document.documentElement.lang === 'en' ? 'copied!' : 'copiază link';
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(function () {
+          btn.textContent = document.documentElement.lang === 'en' ? 'copied!' : 'copiat!';
+          setTimeout(function () { btn.textContent = copiedLabel; }, 1500);
+        });
+      }
+    }
+  </script>
+<%- include('../partials/admin-foot', { currentPath: '/admin/members' }) %>
+<script src="/pwa.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="<%= language %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Plăți - PayReminder</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon-192.png">
+<meta name="theme-color" content="#090d17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<%- include('../partials/admin-head', { currentPath: '/admin/payments' }) %>
+
+  <div class="row">
+    <div>
+      <div class="title">Plăți</div>
+      <p class="subtitle">Notificarile de plata. Confirmi manual dupa ce verifici linkul de plata al serviciului.</p>
+    </div>
+    <div class="grow"></div>
+    <div class="row month-nav">
+      <a class="btn btn-gray btn-sm" href="/admin/payments?month=<%= stepBack %><%= selectedServiceId ? '&serviceId=' + encodeURIComponent(selectedServiceId) : '' %>">← luna trecută</a>
+      <b><%= monthLabel %></b>
+      <a class="btn btn-gray btn-sm" href="/admin/payments?month=<%= stepForward %><%= selectedServiceId ? '&serviceId=' + encodeURIComponent(selectedServiceId) : '' %>">luna următoare →</a>
+    </div>
+  </div>
+
+  <% if (msg) { %>
+    <div class="alert alert-ok">✅ <%= msg %></div>
+  <% } %>
+  <% if (err) { %>
+    <div class="alert alert-err"><%= err === 'plataInvalida' ? 'Datele plății nu sunt valide.' : 'Perioada aleasă se suprapune cu o plată deja înregistrată.' %></div>
+  <% } %>
+
+  <div class="card">
+    <h3 style="margin-top:0">Înregistrează o plată în avans</h3>
+    <p class="muted">Plata va fi confirmată automat și va acoperi lunile consecutive selectate.</p>
+    <form class="row filter-row" method="post" action="/admin/payments/advance">
+      <div class="form-group" style="margin:0;min-width:190px;flex:1">
+        <label for="advance-member">Utilizator</label>
+        <select id="advance-member" name="memberId" required>
+          <option value="">Alege utilizatorul</option>
+          <% members.filter((member) => member.active).forEach((member) => { %>
+            <option value="<%= member.id %>"><%= member.name %> — <%= member.email %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;min-width:170px;flex:1">
+        <label for="advance-service">Serviciu</label>
+        <select id="advance-service" name="serviceId" required>
+          <% services.forEach((service) => { %>
+            <option value="<%= service.id %>" <%= selectedServiceId === service.id ? 'selected' : '' %>><%= service.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;min-width:170px">
+        <label for="advance-month">Prima lună</label>
+        <input id="advance-month" type="month" name="month" value="<%= month %>" required>
+      </div>
+      <div class="form-group" style="margin:0;min-width:130px">
+        <label for="advance-count">Număr de luni</label>
+        <input id="advance-count" type="number" name="months" min="1" max="120" value="3" required>
+      </div>
+      <button class="btn btn-green" type="submit" style="align-self:end">Înregistrează plata</button>
+    </form>
+  </div>
+
+  <form class="row filter-row" method="get" action="/admin/payments">
+    <input type="hidden" name="month" value="<%= month %>">
+    <div class="form-group" style="margin:0;min-width:220px;flex:1">
+      <label for="service-filter">Serviciu</label>
+      <select id="service-filter" name="serviceId">
+        <option value="">Toate serviciile</option>
+        <% services.forEach((service) => { %>
+          <option value="<%= service.id %>" <%= selectedServiceId === service.id ? 'selected' : '' %>><%= service.name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button class="btn btn-gray" type="submit">Filtrează</button>
+  </form>
+
+  <div class="card">
+    <% if (payments.length === 0) { %>
+      <p class="muted"><%= language === 'en' ? 'No payments recorded for' : 'Nicio plată înregistrată pentru' %> <%= monthLabel %>.</p>
+    <% } else { %>
+      <table class="responsive-table payments-table">
+        <thead>
+          <tr><th>Utilizator</th><th>Serviciu</th><th>Luni acoperite</th><th>Data raportării</th><th>Suma</th><th>Status</th><th>Acțiuni</th></tr>
+        </thead>
+        <tbody>
+        <% payments.forEach((p) => { %>
+          <tr id="p-<%= p.id %>" <%= highlight === p.id ? 'style="background:#312e81"' : '' %>>
+            <td data-label="Utilizator"><b><%= p.memberName %></b>
+              <div class="muted"><%= p.memberEmail %></div>
+            </td>
+            <td data-label="Serviciu"><%= p.serviceName || 'Serviciu' %></td>
+            <td data-label="Luni acoperite"><%= p.months > 1 ? `${humanMonth(p.month)} – ${humanMonth(p.endMonth)}` : humanMonth(p.month) %></td>
+            <td data-label="Data raportării"><%= new Date(p.createdAt).toLocaleString(language === 'en' ? 'en-GB' : 'ro-RO', { dateStyle: 'short', timeStyle: 'short' }) %></td>
+            <td data-label="Suma"><%= p.amount.toFixed(2).replace('.', ',') %> <%= config.currency %><%= p.months > 1 ? ` (${p.months} luni)` : '' %></td>
+            <td data-label="Status">
+              <% if (p.status === 'confirmed') { %>
+                <span class="badge badge-green">confirmat ✓</span>
+              <% } else { %>
+                <span class="badge badge-amber">în verificare</span>
+              <% } %>
+            </td>
+            <td class="right" data-label="Acțiuni">
+              <div class="table-actions">
+                <% if (p.status !== 'confirmed') { %>
+                  <form method="post" action="/admin/payments/<%= p.id %>/confirm">
+                    <button class="btn btn-green btn-sm" type="submit">Confirm plata</button>
+                  </form>
+                <% } %>
+                <form method="post" action="/admin/payments/<%= p.id %>/delete" onsubmit="return confirm('Stergi aceasta plata?')">
+                  <button class="btn btn-danger btn-sm" type="submit">șterge</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Verificare manuala</h3>
+    <p class="muted">
+      1. Deschizi linkul de plata al serviciului si verifici suma.<br>
+      2. Apasi <b>Confirm plata</b> in tabelul de mai sus.<br>
+      3. Utilizatorul primeste automat un email de confirmare.
+    </p>
+    <% if (selectedServiceId) { %>
+      <% const selectedService = services.find((service) => service.id === selectedServiceId); %>
+      <% if (selectedService) { %>
+        <% if (selectedService.paymentUrl) { %>
+          <p class="muted">Link serviciu: <a href="<%= selectedService.paymentUrl %>" target="_blank" rel="noopener"><%= selectedService.paymentUrl %></a></p>
+        <% } else { %>
+          <p class="muted">Linkul de plată al serviciului nu este configurat.</p>
+        <% } %>
+      <% } %>
+    <% } %>
+  </div>
+
+<%- include('../partials/admin-foot', { currentPath: '/admin/payments' }) %>
+<script src="/pwa.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="<%= language %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Servicii - PayReminder</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon-192.png">
+<meta name="theme-color" content="#090d17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<%- include('../partials/admin-head', { currentPath: '/admin/services' }) %>
+
+  <div class="row">
+    <div>
+      <div class="title">Servicii</div>
+      <p class="subtitle">Serviciile pentru care trimiti reamintiri si primesti confirmari.</p>
+    </div>
+    <div class="grow"></div>
+    <a class="btn btn-indigo" href="/admin/services/new">+ Adaugă serviciu</a>
+  </div>
+
+  <% if (msg) { %>
+    <div class="alert alert-ok">✅ <%= msg %></div>
+  <% } %>
+  <% if (err) { %>
+    <div class="alert alert-err"><%= err %></div>
+  <% } %>
+
+  <div class="card">
+    <% if (services.length === 0) { %>
+      <p class="muted">Niciun serviciu. Adauga primul serviciu pentru a incepe.</p>
+    <% } else { %>
+      <table class="responsive-table services-table">
+        <thead>
+          <tr><th>Serviciu</th><th>Link de plată</th><th>Programare</th><th>Utilizatori</th><th>Status</th><th>Acțiuni</th></tr>
+        </thead>
+        <tbody>
+        <% services.forEach((service) => { %>
+          <tr>
+            <td data-label="Serviciu"><b><%= service.name %></b></td>
+            <td data-label="Link de plată">
+              <% if (service.paymentUrl) { %>
+                <a href="<%= service.paymentUrl %>" target="_blank" rel="noopener"><%= service.paymentUrl %></a>
+              <% } else { %>
+                <span class="muted">Neconfigurat</span>
+              <% } %>
+            </td>
+            <td data-label="Programare"><%= language === 'en' ? 'day' : 'ziua' %> <%= service.reminderDay %>, <%= language === 'en' ? 'time' : 'ora' %> <%= String(service.reminderHour).padStart(2, '0') %>:00</td>
+            <td data-label="Utilizatori"><%= service.memberCount %></td>
+            <td data-label="Status">
+              <% if (service.active) { %>
+                <span class="badge badge-green">activ ✓</span>
+              <% } else { %>
+                <span class="badge badge-gray">inactiv</span>
+              <% } %>
+            </td>
+            <td class="right" data-label="Acțiuni">
+              <div class="table-actions">
+                <a class="btn btn-gray btn-sm" href="/admin/services/<%= service.id %>">editează</a>
+                <form method="post" action="/admin/services/<%= service.id %>/delete" onsubmit="return confirm('Ștergi serviciul <%= service.name %>?')">
+                  <button class="btn btn-danger btn-sm" type="submit">șterge</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Cum funcționează</h3>
+    <p class="muted">Adauga un serviciu, apoi asociaza-i utilizatorii. Fiecare utilizator primeste emailul lunar si are propriul link de plata si confirmare.</p>
+  </div>
+<%- include('../partials/admin-foot', { currentPath: '/admin/services' }) %>
+<script src="/pwa.js" defer></script>
+</body>
+</html>

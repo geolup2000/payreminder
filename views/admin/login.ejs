@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="<%= language %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Autentificare - PayReminder</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon-192.png">
+<meta name="theme-color" content="#090d17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main class="auth-layout">
+  <section class="auth-story">
+    <a class="public-brand" href="/"><span class="brand-mark">p</span><span>pay<span class="brand-light">reminder</span></span></a>
+    <div class="auth-message">
+      <h1>Un pic mai multă ordine.<br><span>În fiecare lună.</span></h1>
+      <p>Plățile recurente și reamintirile tale, într-un singur loc.</p>
+    </div>
+    <div class="auth-footnote">PayReminder <span>·</span> Administrare</div>
+  </section>
+  <section class="auth-panel">
+    <div class="auth-panel-inner">
+      <h2>Bine ai revenit.</h2>
+      <p>Autentifică-te pentru a continua.</p>
+      <div class="card">
+    <% if (error) { %>
+      <div class="alert alert-err">Utilizator sau parola incorecta.</div>
+    <% } %>
+    <form method="post" action="/admin/login">
+      <div class="form-group">
+        <label for="username">Utilizator</label>
+        <input type="text" id="username" name="username" autocomplete="username" autofocus required>
+      </div>
+      <div class="form-group">
+        <label for="pwd">Parola</label>
+        <input type="password" id="pwd" name="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn-indigo btn-block" type="submit">Intră</button>
+    </form>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/i18n.js"></script>
+<script src="/pwa.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="<%= language %>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title><%= member ? 'Editează utilizator' : 'Adaugă utilizator' %> - PayReminder</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/app-icon-192.png">
+<meta name="theme-color" content="#090d17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<%- include('../partials/admin-head', { currentPath: '/admin/members/new' }) %>
+
+  <div class="title"><%= member ? 'Editează: ' + member.name : 'Adaugă utilizator' %></div>
+  <p class="subtitle">Bifează serviciile la care e abonat și completează suma plătită lunar pentru fiecare.</p>
+
+  <% if (error) { %>
+    <div class="alert alert-err"><%= error %></div>
+  <% } %>
+
+  <div class="card" style="max-width:560px">
+    <form method="post" action="<%= member ? '/admin/members/' + member.id : '/admin/members' %>">
+      <div class="form-group">
+        <label>Servicii</label>
+        <div class="service-checks">
+          <% services.forEach((service) => { %>
+            <% const membership = member && member.memberships ? member.memberships.find((m) => m.serviceId === service.id) : null; %>
+            <div class="service-check">
+              <input
+                type="checkbox"
+                id="svc-<%= service.id %>"
+                name="serviceIds"
+                value="<%= service.id %>"
+                <%= membership || service.id === preselectedServiceId ? 'checked' : '' %>>
+              <label for="svc-<%= service.id %>" class="service-check-name"><%= service.name %><%= service.active ? '' : ' (inactiv)' %></label>
+              <input
+                class="amount-input"
+                type="number"
+                name="amounts[<%= service.id %>]"
+                step="0.01"
+                min="0"
+                placeholder="Suma"
+                value="<%= membership ? membership.amount : (service.id === preselectedServiceId ? defaultAmount : '') %>">
+            </div>
+          <% }) %>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="name">Nume</label>
+        <input type="text" id="name" name="name" required value="<%= member ? member.name : '' %>" placeholder="ex. Mama">
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required value="<%= member ? member.email : '' %>" placeholder="ex. mama@icloud.com">
+      </div>
+      <div class="form-group form-check">
+        <input type="checkbox" id="active" name="active" <%= member ? (member.active ? 'checked' : '') : 'checked' %>>
+        <label for="active" style="margin:0;color:var(--text)">Utilizator activ (primeste reamintiri)</label>
+      </div>
+      <div class="button-row">
+        <button class="btn btn-indigo" type="submit"><%= member ? 'Salvează' : 'Adaugă' %></button>
+        <a class="btn btn-gray" href="/admin/members">Anulează</a>
+      </div>
+    </form>
+  </div>
+
+  <% if (member) { %>
+  <div class="card">
+    <h3 style="margin-top:0">Link personal</h3>
+    <p class="muted">Trimite-i utilizatorului acest link, care apare si in emailul lunar:</p>
+    <p><a href="/p/<%= member.token %>" target="_blank"><%= config.appUrl %>/p/<%= member.token %></a></p>
+  </div>
+  <% } %>
+<%- include('../partials/admin-foot', { currentPath: '/admin/members/new' }) %>
+<script src="/pwa.js" defer></script>
+</body>
+</html>
