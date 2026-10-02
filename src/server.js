@@ -553,6 +553,7 @@ app.post('/admin/payments/advance', requireAdmin, (req, res) => {
   );
   if (overlap) return res.redirect(`/admin/payments?month=${encodeURIComponent(month)}&serviceId=${encodeURIComponent(service.id)}&err=perioadaOcupata`);
   const payment = db.createPayment({ member, service, month, months, amount: membership.amount * months });
+  db.setPaymentStatus(payment.id, 'confirmed');
   const successMessage = appLanguage() === 'en'
     ? 'Advance payment recorded and confirmed.'
     : 'Plata în avans a fost înregistrată și confirmată.';

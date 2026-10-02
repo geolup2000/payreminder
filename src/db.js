@@ -381,9 +381,9 @@ function createPayment({ member, service, month, months = 1, amount }) {
     endMonth,
     months: count,
     amount,
-    status: 'confirmed',
+    status: 'pending',
     createdAt: nowIso(),
-    confirmedAt: nowIso(),
+    confirmedAt: null,
   };
   payments.push(payment);
   savePayments(payments);
