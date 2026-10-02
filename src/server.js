@@ -583,9 +583,12 @@ app.post('/admin/payments/:id/confirm', requireAdmin, async (req, res) => {
       console.error('[confirm] email utilizator esuat:', err.message)
     );
   }
+  const message = appLanguage() === 'en'
+    ? 'Payment confirmed successfully.'
+    : 'Plata a fost confirmată cu succes.';
   const redirectUrl = req.body && req.body.returnTo === '/admin'
-    ? '/admin?msg=confirmat'
-    : `/admin/payments?month=${encodeURIComponent(payment.month)}&msg=confirmat${serviceQuery(payment.serviceId)}`;
+    ? `/admin?msg=${encodeURIComponent(message)}`
+    : `/admin/payments?month=${encodeURIComponent(payment.month)}&msg=${encodeURIComponent(message)}${serviceQuery(payment.serviceId)}`;
   res.redirect(redirectUrl);
 });
 

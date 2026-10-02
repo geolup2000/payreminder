@@ -102,7 +102,7 @@
             <td data-label="Suma"><%= p.amount.toFixed(2).replace('.', ',') %> <%= config.currency %><%= p.months > 1 ? ` (${p.months} luni)` : '' %></td>
             <td data-label="Status">
               <% if (p.status === 'confirmed') { %>
-                <span class="badge badge-green">confirmat ✓</span>
+                <span class="badge badge-green"><%= language === 'en' ? 'confirmed ✓' : 'confirmat ✓' %></span>
               <% } else { %>
                 <span class="badge badge-amber">în verificare</span>
               <% } %>
