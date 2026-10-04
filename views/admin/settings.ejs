@@ -63,12 +63,14 @@
             <p class="muted">Imaginea de profil folosește automat iconul PayReminder.</p>
           </div>
           <% } %>
-          <button class="btn btn-ghost" type="button" data-test="<%= agent %>">Trimite mesaj de test</button>
-          <div data-test-result role="status" aria-live="polite" hidden></div>
         </div>
       </section>
       <% } %>
-      <div class="button-row"><button class="btn btn-indigo" type="submit">Salvează setările</button></div>
+      <div class="button-row settings-actions">
+        <button class="btn btn-indigo" type="submit">Salvează setările</button>
+        <button class="btn btn-yellow" type="button" data-test>Trimite mesaj de test</button>
+      </div>
+      <div data-test-result role="status" aria-live="polite" hidden></div>
     </form>
   </div>
 
@@ -80,6 +82,10 @@
       section.hidden = section.dataset.agent !== agentSelect.value;
       section.querySelector('[data-fields]').hidden = !section.querySelector('[data-active]').checked;
     }
+    const testButton = document.querySelector('[data-test]');
+    testButton.dataset.test = agentSelect.value;
+    testButton.hidden = !document.querySelector(`[data-agent="${agentSelect.value}"] [data-active]`).checked;
+    document.querySelector('[data-test-result]').hidden = true;
   }
   agentSelect.addEventListener('change', updateNotificationFields);
   for (const checkbox of document.querySelectorAll('[data-active]')) {
@@ -89,7 +95,7 @@
   for (const button of document.querySelectorAll('[data-test]')) {
     button.addEventListener('click', async () => {
       const english = document.getElementById('language').value === 'en';
-      const result = button.parentElement.querySelector('[data-test-result]');
+      const result = button.form.querySelector('[data-test-result]');
       const originalLabel = button.textContent;
       const buttons = document.querySelectorAll('[data-test]');
       for (const item of buttons) item.disabled = true;
