@@ -5,8 +5,7 @@ function escapeMarkdown(value) {
   return String(value ?? '').replace(/([\\`*_{}\[\]()<>#+\-.!|~])/g, '\\$1');
 }
 
-async function sendDiscord(content) {
-  const discord = getNotificationSettings().discord;
+async function sendDiscord(content, discord = getNotificationSettings().discord) {
   if (!discord.active || !discord.webhookUrl) return { skipped: true };
 
   const url = new URL(discord.webhookUrl);
@@ -26,7 +25,9 @@ async function sendDiscord(content) {
   });
   if (!res.ok) {
     // Do not log the webhook URL: it contains a secret token.
-    throw new Error(`Discord webhook error (HTTP ${res.status})`);
+    const error = new Error(`Discord webhook error (HTTP ${res.status})`);
+    error.status = res.status;
+    throw error;
   }
   console.log('[discord] notificare trimisa');
   return { sent: true };

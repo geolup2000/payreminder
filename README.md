@@ -161,6 +161,8 @@ Configuration is stored in `data/settings.json`. Existing notification variables
 
 The agent selector only changes which configuration is displayed; it does not disable the other agent. To enable both, select Telegram, check **Active** and fill in its fields, then select Discord and do the same. Click **Save settings** to save both configurations together. To disable an agent, select it, uncheck **Active**, and save. Its credentials remain available if you enable it again later. Active Telegram requires both fields, and active Discord requires a valid Discord webhook URL.
 
+Each active agent has a **Send test message** button. The test uses the current form values without saving them and sends a confirmation message in the language selected in the form. The page shows success or a localized error if validation or delivery fails. Save settings after a successful test to apply the configuration to future payment notifications.
+
 Notifications use the Romanian or English language selected in **Admin → Settings**, including the message text, month, amount formatting, and confirmation link label. They include the member, service, amount, month, and admin confirmation link. Language changes apply to subsequent notifications immediately after saving. Failure on one channel does not prevent the other from sending. Discord messages suppress mentions. See the [Discord webhook documentation](https://docs.discord.com/developers/resources/webhook#execute-webhook).
 
 ## First-time setup in the admin panel

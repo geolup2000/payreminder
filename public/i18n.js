@@ -9,6 +9,7 @@
     'ID-ul conversației Telegram': 'Telegram chat ID',
     'Adresa webhookului Discord': 'Discord webhook URL',
     'Nume aplicație': 'Application name',
+    'Trimite mesaj de test': 'Send test message',
     'Imaginea de profil folosește automat iconul PayReminder.': 'The profile image automatically uses the PayReminder icon.',
     'Numele aplicației poate avea maximum 80 de caractere.': 'The application name can contain up to 80 characters.',
     'Completează tokenul botului și Chat ID pentru Telegram.': 'Enter the bot token and Chat ID for Telegram.',

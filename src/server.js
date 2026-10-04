@@ -5,6 +5,7 @@ const db = require('./db');
 const { sendReminderEmail, sendConfirmEmail } = require('./mailer');
 const telegram = require('./telegram');
 const discord = require('./discord');
+const { testNotification } = require('./notification-check');
 const { getNotificationSettings, notificationSettingsFromBody } = require('./notification-settings');
 const { startScheduler, sendRemindersTo } = require('./scheduler');
 const { currentMonth, localizedMonth, formatMoney } = require('./format');
@@ -282,6 +283,12 @@ app.get('/admin/settings', requireAdmin, (req, res) => {
     language: appLanguage(),
     saved: req.query.saved === '1',
   });
+});
+
+app.post('/admin/settings/test-notification', requireAdmin, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const result = await testNotification(req.body);
+  res.status(result.status).json(result.body);
 });
 
 app.post('/admin/settings', requireAdmin, (req, res) => {

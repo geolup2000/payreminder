@@ -9,8 +9,7 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-async function sendTelegram(text) {
-  const telegram = getNotificationSettings().telegram;
+async function sendTelegram(text, telegram = getNotificationSettings().telegram) {
   if (!telegram.active || !telegram.botToken || !telegram.chatId) {
     return { skipped: true };
   }
@@ -18,6 +17,7 @@ async function sendTelegram(text) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(10000),
     body: JSON.stringify({
       chat_id: telegram.chatId,
       text,
@@ -25,10 +25,11 @@ async function sendTelegram(text) {
       disable_web_page_preview: true,
     }),
   });
-  const data = await res.json();
-  if (!data.ok) {
-    console.error('[telegram] eroare la trimitere:', JSON.stringify(data));
-    throw new Error('Telegram error: ' + (data.description || 'unknown'));
+  const data = await res.json().catch(() => ({}));
+  if (res.ok === false || !data.ok) {
+    const error = new Error('Telegram request failed');
+    error.status = data.error_code || res.status;
+    throw error;
   }
   console.log('[telegram] notificare trimisa');
   return data;
