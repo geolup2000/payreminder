@@ -293,7 +293,7 @@ app.post('/admin/settings', requireAdmin, (req, res) => {
     res.set('Cache-Control', 'no-store');
     return res.status(400).render('admin/settings', { saved: false, error: err.message, notifications: {
       telegram: { active: req.body.telegramActive === 'on', botToken: req.body.telegramBotToken || '', chatId: req.body.telegramChatId || '' },
-      discord: { active: req.body.discordActive === 'on', webhookUrl: req.body.discordWebhookUrl || '', iconUrl: req.body.discordIconUrl || '' },
+      discord: { active: req.body.discordActive === 'on', webhookUrl: req.body.discordWebhookUrl || '', appName: req.body.discordAppName || config.appName },
     } });
   }
   res.redirect('/admin/settings?saved=1');

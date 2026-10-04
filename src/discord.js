@@ -13,10 +13,10 @@ async function sendDiscord(content) {
   url.searchParams.set('wait', 'true');
   const payload = {
     content,
-    username: config.appName,
+    username: discord.appName || config.appName,
+    avatar_url: `${config.appUrl}/favicon.png`,
     allowed_mentions: { parse: [] },
   };
-  if (discord.iconUrl) payload.avatar_url = discord.iconUrl;
 
   const res = await fetch(url, {
     method: 'POST',

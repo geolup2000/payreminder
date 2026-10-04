@@ -16,11 +16,11 @@ test('Discord skips sending when disabled', async () => {
   assert.equal((await discord.sendDiscord('test')).skipped, true);
 });
 
-for (const iconUrl of ['', 'https://example.com/icon.png']) {
-  test(`Discord sends payment details ${iconUrl ? 'with' : 'without'} custom avatar`, async () => {
+for (const appName of ['', 'My Payments']) {
+  test(`Discord sends payment details with ${appName ? 'custom' : 'default'} application name and favicon avatar`, async () => {
     let request;
-    const discord = loadDiscord({ discordConfigured: true, appName: 'PayReminder', discord: {
-      webhookUrl: 'https://discord.com/api/webhooks/123/secret?thread_id=456', iconUrl,
+    const discord = loadDiscord({ discordConfigured: true, appName: 'PayReminder', appUrl: 'https://example.com', discord: {
+      webhookUrl: 'https://discord.com/api/webhooks/123/secret?thread_id=456', appName, iconUrl: 'https://old.example.com/icon.png',
     } }, async (url, options) => {
       request = { url, options, payload: JSON.parse(options.body) };
       return { ok: true, status: 204 };
@@ -30,7 +30,8 @@ for (const iconUrl of ['', 'https://example.com/icon.png']) {
     assert.equal(request.url.searchParams.get('thread_id'), '456');
     assert.equal(request.options.method, 'POST');
     assert.deepEqual(request.payload.allowed_mentions, { parse: [] });
-    assert.equal(request.payload.avatar_url, iconUrl || undefined);
+    assert.equal(request.payload.avatar_url, 'https://example.com/favicon.png');
+    assert.equal(request.payload.username, appName || 'PayReminder');
     for (const detail of ['\\*Ana\\*', 'Netflix', 'octombrie 2026', '15 RON', 'https://example.com/admin/payments']) {
       assert.ok(request.payload.content.includes(detail));
     }

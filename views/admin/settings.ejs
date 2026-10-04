@@ -58,8 +58,9 @@
             <input id="discordWebhookUrl" name="discordWebhookUrl" type="password" autocomplete="new-password" value="<%= notifications.discord.webhookUrl %>">
           </div>
           <div class="form-group">
-            <label for="discordIconUrl">Adresa imaginii de profil Discord (opțional)</label>
-            <input id="discordIconUrl" name="discordIconUrl" type="text" inputmode="url" value="<%= notifications.discord.iconUrl %>">
+            <label for="discordAppName">Nume aplicație</label>
+            <input id="discordAppName" name="discordAppName" type="text" maxlength="80" value="<%= notifications.discord.appName %>">
+            <p class="muted">Imaginea de profil folosește automat iconul PayReminder.</p>
           </div>
           <% } %>
         </div>

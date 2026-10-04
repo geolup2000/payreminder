@@ -6,7 +6,7 @@ const vm = require('node:vm');
 function load(settings = {}) {
   const context = { URL, module: { exports: {} }, require: (name) => name === './db'
     ? { getSettings: () => settings }
-    : { telegramConfigured: true, telegram: { botToken: 'legacy', chatId: '123' }, discordConfigured: false, discord: { webhookUrl: '', iconUrl: '' } } };
+    : { appName: 'PayReminder', telegramConfigured: true, telegram: { botToken: 'legacy', chatId: '123' }, discordConfigured: false, discord: { webhookUrl: '' } } };
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/notification-settings'), 'utf8'), context);
   return context.module.exports;
 }
@@ -23,11 +23,14 @@ test('Legacy configuration is used only until settings are saved', () => {
 
 test('Inactive agents retain credentials, and both agents can be enabled', () => {
   const helper = load();
-  const body = { telegramBotToken: ' token ', telegramChatId: '-123', discordWebhookUrl: 'https://discord.com/api/webhooks/123/token', discordIconUrl: 'https://example.com/icon.png' };
+  const body = { telegramBotToken: ' token ', telegramChatId: '-123', discordWebhookUrl: 'https://discord.com/api/webhooks/123/token', discordAppName: ' My Payments ' };
   const inactive = helper.notificationSettingsFromBody(body);
   assert.equal(inactive.telegram.active, false);
   assert.equal(inactive.telegram.botToken, 'token');
   assert.equal(inactive.discord.webhookUrl, body.discordWebhookUrl);
+  assert.equal(inactive.discord.appName, 'My Payments');
+  assert.equal(helper.notificationSettingsFromBody({}).discord.appName, 'PayReminder');
+  assert.equal(helper.getNotificationSettings().discord.appName, 'PayReminder');
   const active = helper.notificationSettingsFromBody({ ...body, telegramActive: 'on', discordActive: 'on' });
   assert.equal(active.telegram.active, true);
   assert.equal(active.discord.active, true);
@@ -39,5 +42,5 @@ test('Enabled agents require valid credentials and URLs', () => {
   for (const discordWebhookUrl of ['', 'https://example.com/api/webhooks/123/token', 'http://discord.com/api/webhooks/123/token']) {
     assert.throws(() => helper.notificationSettingsFromBody({ discordActive: 'on', discordWebhookUrl }), /webhook/);
   }
-  assert.throws(() => helper.notificationSettingsFromBody({ discordActive: 'on', discordWebhookUrl: 'https://discord.com/api/webhooks/123/token', discordIconUrl: 'javascript:alert(1)' }), /icon/);
+  assert.throws(() => helper.notificationSettingsFromBody({ discordAppName: 'a'.repeat(81) }), /80/);
 });

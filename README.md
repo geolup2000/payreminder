@@ -155,11 +155,11 @@ The app uses STARTTLS (`requireTLS`) and a non-secure SMTP connection upgraded w
 Open **Admin → Settings → Notifications**, choose **Telegram** or **Discord**, and check **Active** to show its configuration fields. Each agent is enabled independently, so both can be active. Unchecking Active hides the fields and preserves their values. Save to apply changes immediately, without restarting.
 
 - **Telegram:** create a bot with `@BotFather`, copy its token into `TELEGRAM_BOT_TOKEN`, and enter the destination chat ID in `TELEGRAM_CHAT_ID`. Make sure the bot can send messages to that chat.
-- **Discord:** create a webhook under the channel's **Integrations → Webhooks** settings and enter `DISCORD_WEBHOOK_URL`. Optionally enter a public image URL in `DISCORD_ICON_URL`; leave it blank to use the webhook avatar.
+- **Discord:** create a webhook under the channel's **Integrations → Webhooks** settings and enter `DISCORD_WEBHOOK_URL`. Set **Application name** to the sender name shown in Discord (up to 80 characters; defaults to `PayReminder`). The avatar automatically uses the PayReminder favicon, served as a PNG at `APP_URL/favicon.png`. Set `APP_URL` to a publicly accessible HTTPS address so Discord can load it; no image URL needs to be entered.
 
 Configuration is stored in `data/settings.json`. Existing notification variables in `.env` are used until you first save these settings; afterward, the saved settings take priority and those variables can be removed from `.env`. Include settings.json in backups and keep it private: it contains notification credentials.
 
-The agent selector only changes which configuration is displayed; it does not disable the other agent. To enable both, select Telegram, check **Active** and fill in its fields, then select Discord and do the same. Click **Save settings** to save both configurations together. To disable an agent, select it, uncheck **Active**, and save. Its credentials remain available if you enable it again later. `DISCORD_ICON_URL` is optional; active Telegram requires both fields, and active Discord requires a valid Discord webhook URL.
+The agent selector only changes which configuration is displayed; it does not disable the other agent. To enable both, select Telegram, check **Active** and fill in its fields, then select Discord and do the same. Click **Save settings** to save both configurations together. To disable an agent, select it, uncheck **Active**, and save. Its credentials remain available if you enable it again later. Active Telegram requires both fields, and active Discord requires a valid Discord webhook URL.
 
 Notifications use the Romanian or English language selected in **Admin → Settings**, including the message text, month, amount formatting, and confirmation link label. They include the member, service, amount, month, and admin confirmation link. Language changes apply to subsequent notifications immediately after saving. Failure on one channel does not prevent the other from sending. Discord messages suppress mentions. See the [Discord webhook documentation](https://docs.discord.com/developers/resources/webhook#execute-webhook).
 
@@ -194,7 +194,7 @@ Advance payments are recorded as confirmed and cover the selected consecutive mo
 | `/admin/services` | Add, edit, activate/deactivate, and schedule services. |
 | `/admin/members` | Manage members, service assignments, amounts, and personal links. |
 | `/admin/payments` | Filter payment reports, confirm or remove records, and record advance payments. |
-| `/admin/settings` | Choose the application and email language; configure and activate Telegram and Discord notifications, including an optional Discord icon URL. |
+| `/admin/settings` | Choose the application and email language; configure and activate Telegram and Discord notifications, including the Discord application name and automatic favicon avatar. |
 
 ## Data, backups, and updates
 
@@ -221,7 +221,7 @@ If `git pull` reports local changes would be overwritten, inspect them before di
 ## Troubleshooting
 
 - **Emails are not sent:** Check `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASS`; review `journalctl -u payreminder -f`. Emails are disabled when SMTP credentials are missing.
-- **Discord notifications are missing:** In **Admin → Settings → Notifications**, select Discord, make sure **Active** is checked, verify the webhook URL, and save. Make sure the webhook still exists and can post to the channel, and inspect the service logs. For a custom avatar, check that `DISCORD_ICON_URL` is publicly accessible.
+- **Discord notifications are missing:** In **Admin → Settings → Notifications**, select Discord, make sure **Active** is checked, verify the webhook URL, and save. Make sure the webhook still exists and can post to the channel, and inspect the service logs. If the avatar is missing, check that `APP_URL/favicon.png` is publicly accessible.
 - **Telegram notifications are missing:** In **Admin → Settings → Notifications**, select Telegram, make sure **Active** is checked, verify the bot token and chat ID, and save. Make sure the bot can message the configured chat, and inspect the service logs.
 - **Links point to localhost or the wrong host:** Set `APP_URL` to the public HTTPS address and restart the service.
 - **Scheduled reminders do not run:** Keep the service active, check the server timezone, confirm the service is active, and review its reminder day/hour and logs.

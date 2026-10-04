@@ -26,7 +26,6 @@ const config = {
 
   discord: {
     webhookUrl: (process.env.DISCORD_WEBHOOK_URL || '').trim(),
-    iconUrl: (process.env.DISCORD_ICON_URL || '').trim(),
   },
 
   currency: process.env.CURRENCY || 'RON',
