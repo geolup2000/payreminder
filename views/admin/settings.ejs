@@ -45,20 +45,20 @@
         <div data-fields <%= notifications[agent].active ? '' : 'hidden' %>>
           <% if (agent === 'telegram') { %>
           <div class="form-group">
-            <label for="telegramBotToken">TELEGRAM_BOT_TOKEN</label>
+            <label for="telegramBotToken">Tokenul botului Telegram</label>
             <input id="telegramBotToken" name="telegramBotToken" type="password" autocomplete="new-password" value="<%= notifications.telegram.botToken %>">
           </div>
           <div class="form-group">
-            <label for="telegramChatId">TELEGRAM_CHAT_ID</label>
+            <label for="telegramChatId">ID-ul conversației Telegram</label>
             <input id="telegramChatId" name="telegramChatId" type="text" value="<%= notifications.telegram.chatId %>">
           </div>
           <% } else { %>
           <div class="form-group">
-            <label for="discordWebhookUrl">DISCORD_WEBHOOK_URL</label>
+            <label for="discordWebhookUrl">Adresa webhookului Discord</label>
             <input id="discordWebhookUrl" name="discordWebhookUrl" type="password" autocomplete="new-password" value="<%= notifications.discord.webhookUrl %>">
           </div>
           <div class="form-group">
-            <label for="discordIconUrl">DISCORD_ICON_URL (opțional)</label>
+            <label for="discordIconUrl">Adresa imaginii de profil Discord (opțional)</label>
             <input id="discordIconUrl" name="discordIconUrl" type="text" inputmode="url" value="<%= notifications.discord.iconUrl %>">
           </div>
           <% } %>
