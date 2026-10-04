@@ -222,14 +222,16 @@ app.post('/p/:token/pay', async (req, res) => {
 });
 
 async function notifyReported(member, service, month, payment) {
+  const language = appLanguage();
   await Promise.all([['telegram', telegram], ['discord', discord]].map(async ([name, channel]) => {
     try {
       await channel.notifyPaymentReported(
         member,
-        localizedMonth(month, appLanguage()),
-        formatMoney(payment.amount, config.currency),
+        localizedMonth(month, language),
+        formatMoney(payment.amount, config.currency, language),
         `${config.appUrl}/admin/payments?month=${encodeURIComponent(month)}&serviceId=${encodeURIComponent(service.id || '')}&highlight=${payment.id}`,
-        service && service.name
+        service && service.name,
+        language
       );
     } catch (err) {
       console.error(`[pay] ${name} esuat:`, err.message);

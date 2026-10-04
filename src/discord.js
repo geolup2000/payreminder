@@ -32,15 +32,16 @@ async function sendDiscord(content) {
   return { sent: true };
 }
 
-async function notifyPaymentReported(member, monthLabel, amountText, confirmUrl, serviceName) {
+async function notifyPaymentReported(member, monthLabel, amountText, confirmUrl, serviceName, language = 'ro') {
+  const english = language === 'en';
   const serviceLine = serviceName ? `\n🏷️ **${escapeMarkdown(serviceName).slice(0, 400)}**` : '';
-  const content = `💰 **Plată raportată**
+  const content = `💰 **${english ? 'Payment reported' : 'Plată raportată'}**
 
-**${escapeMarkdown(member.name).slice(0, 400)}** a notificat plata pentru${serviceLine}
+**${escapeMarkdown(member.name).slice(0, 400)}** ${english ? 'reported a payment for' : 'a notificat plata pentru'}${serviceLine}
 📅 ${escapeMarkdown(monthLabel)}
 💵 ${escapeMarkdown(amountText)}
 
-Confirmă după verificare → <${confirmUrl}>`;
+${english ? 'Confirm after verification' : 'Confirmă după verificare'} → <${confirmUrl}>`;
   return sendDiscord(content);
 }
 

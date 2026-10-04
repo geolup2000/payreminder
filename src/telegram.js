@@ -34,16 +34,17 @@ async function sendTelegram(text) {
   return data;
 }
 
-async function notifyPaymentReported(member, monthLabel, amountText, confirmUrl, serviceName) {
+async function notifyPaymentReported(member, monthLabel, amountText, confirmUrl, serviceName, language = 'ro') {
+  const english = language === 'en';
   const serviceLine = serviceName ? `\n🏷️ <b>${escapeHtml(serviceName)}</b>` : '';
   const text =
-`💰 <b>Plată raportată</b>
+`💰 <b>${english ? 'Payment reported' : 'Plată raportată'}</b>
 
-<b>${escapeHtml(member.name)}</b> a notificat plata pentru${serviceLine}
+<b>${escapeHtml(member.name)}</b> ${english ? 'reported a payment for' : 'a notificat plata pentru'}${serviceLine}
 📅 ${monthLabel}
 💵 ${amountText}
 
-<a href="${escapeHtml(confirmUrl)}">Confirmă după verificare →</a>`;
+<a href="${escapeHtml(confirmUrl)}">${english ? 'Confirm after verification' : 'Confirmă după verificare'} →</a>`;
   return sendTelegram(text);
 }
 
