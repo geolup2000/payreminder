@@ -24,6 +24,11 @@ const config = {
     chatId: process.env.TELEGRAM_CHAT_ID || '',
   },
 
+  discord: {
+    webhookUrl: (process.env.DISCORD_WEBHOOK_URL || '').trim(),
+    iconUrl: (process.env.DISCORD_ICON_URL || '').trim(),
+  },
+
   currency: process.env.CURRENCY || 'RON',
   defaultAmount: parseFloat(process.env.DEFAULT_AMOUNT || 0),
   sendConfirmToMember: bool(process.env.SEND_CONFIRM_TO_MEMBER, true),
@@ -31,12 +36,10 @@ const config = {
 
 config.smtpConfigured = !!(config.smtp.user && config.smtp.pass);
 config.telegramConfigured = !!(config.telegram.botToken && config.telegram.chatId);
+config.discordConfigured = !!config.discord.webhookUrl;
 
 if (!config.smtpConfigured) {
   console.warn('[config] SMTP nu este configurat - emailurile sunt dezactivate.');
-}
-if (!config.telegramConfigured) {
-  console.warn('[config] Telegram nu este configurat - notificarile admin dezactivate.');
 }
 
 module.exports = config;

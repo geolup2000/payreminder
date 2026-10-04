@@ -10,7 +10,7 @@ PayReminder does **not** charge cards or process payments. Members pay through t
 - Members can be assigned to multiple services, with a separate monthly amount for each.
 - Automatic and manual reminder emails. A member subscribed to several services receives one reminder email per service; each email links to the member's personal page.
 - A personal page where members can see their subscriptions, open the relevant payment link, and report a payment.
-- Optional Telegram notifications when a member reports a payment.
+- Optional Telegram and Discord webhook notifications when a member reports a payment, configured directly in **Admin → Settings** with a separate active switch for each agent.
 - Manual payment confirmation and optional confirmation emails to members.
 - Optional advance payments covering multiple consecutive months.
 - Romanian and English interface and email templates. Choose the language in **Admin → Settings**.
@@ -55,7 +55,7 @@ PayReminder does **not** charge cards or process payments. Members pay through t
 
 - Node.js 18 or newer and npm.
 - Linux installation script: Debian or Ubuntu in an LXC container, with root access. Do not run the installer on the Proxmox host.
-- An SMTP account to send email. Telegram is optional.
+- An SMTP account to send email. Telegram and Discord notifications are optional.
 - For public access, a domain and an HTTPS reverse proxy such as Caddy or Nginx.
 
 ## Quick start
@@ -72,7 +72,7 @@ On Windows PowerShell, copy the environment file with:
 Copy-Item .env.example .env
 ```
 
-Before using the application, edit `.env`. Set a strong `ADMIN_PASSWORD`, a long random `SESSION_SECRET`, the correct `APP_URL`, and your SMTP details. Without SMTP credentials, the app starts but does not send emails. Telegram notifications are optional.
+Before using the application, edit `.env`. Set a strong `ADMIN_PASSWORD`, a long random `SESSION_SECRET`, the correct `APP_URL`, and your SMTP details. Without SMTP credentials, the app starts but does not send emails. Configure optional Telegram and Discord notifications from **Admin → Settings → Notifications**; new installations do not need notification variables in `.env`.
 
 Open:
 
@@ -96,7 +96,7 @@ chmod +x install.sh
 
 The installer installs Node.js 22 if Node.js 18 or newer is not already available, installs production npm dependencies, creates `.env` from `.env.example` if needed, prompts for a public `APP_URL` when the current value is localhost, initializes the application language to English for a new installation, and creates/enables the `payreminder` systemd service when systemd is available.
 
-The service may start before SMTP and Telegram are configured. Edit the generated `.env`, then restart the service:
+The service may start before SMTP is configured. Edit the generated `.env`, then restart the service:
 
 ```bash
 nano /opt/payreminder/.env
@@ -119,13 +119,13 @@ node src/server.js
 
 ### Expose the app safely
 
-For public access, point a reverse proxy at the app's local port (default `3000`) and enable HTTPS. Set `APP_URL` to the public HTTPS URL, for example `https://reminder.example.com`; this URL is used in member emails and Telegram payment notifications. Restrict direct access to the app port at the firewall so public traffic goes through the HTTPS proxy.
+For public access, point a reverse proxy at the app's local port (default `3000`) and enable HTTPS. Set `APP_URL` to the public HTTPS URL, for example `https://reminder.example.com`; this URL is used in member emails and payment notifications. Restrict direct access to the app port at the firewall so public traffic goes through the HTTPS proxy.
 
 The installer does not configure DNS, HTTPS, a reverse proxy, or firewall rules.
 
 ## Configuration
 
-`.env.example` documents the supported environment variables. The most important settings are:
+`.env.example` documents the environment variables for server, admin, email, and payment defaults. Language and notification agents are configured in **Admin → Settings**. The most important environment settings are:
 
 | Variable | Purpose |
 | --- | --- |
@@ -137,7 +137,6 @@ The installer does not configure DNS, HTTPS, a reverse proxy, or firewall rules.
 | `SMTP_HOST`, `SMTP_PORT` | SMTP server hostname and port. Use the values from your email provider; port `587` with STARTTLS is typical. |
 | `SMTP_USER`, `SMTP_PASS` | SMTP login. Both are required to enable email sending. |
 | `SMTP_FROM_NAME`, `SMTP_FROM_ADDRESS` | Optional sender display name and address. If the address is blank, the SMTP username is used. |
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Optional bot and destination for admin payment notifications. Both are required to enable Telegram. |
 | `CURRENCY` | Currency label shown in the app; defaults to `RON`. |
 | `DEFAULT_AMOUNT` | Suggested amount when adding a member; defaults to `15`. |
 | `DEFAULT_SERVICE_NAME` | Name of the initial service; defaults to `Service`. |
@@ -151,20 +150,25 @@ Enter the SMTP host, port, username, and password provided by your email service
 
 The app uses STARTTLS (`requireTLS`) and a non-secure SMTP connection upgraded with TLS, commonly on port `587`. Check your provider's SMTP documentation if it requires different settings.
 
-### Configure Telegram (optional)
+### Configure notifications (optional)
 
-1. Create a bot with Telegram's `@BotFather` and copy its token to `TELEGRAM_BOT_TOKEN`.
-2. Find the destination chat ID and set `TELEGRAM_CHAT_ID`.
-3. Restart PayReminder after changing `.env`.
+Open **Admin → Settings → Notifications**, choose **Telegram** or **Discord**, and check **Active** to show its configuration fields. Each agent is enabled independently, so both can be active. Unchecking Active hides the fields and preserves their values. Save to apply changes immediately, without restarting.
 
-Telegram messages include the member name, service, reported amount, month, and a link to the admin confirmation page. Keep the bot token private.
+- **Telegram:** create a bot with `@BotFather`, copy its token into `TELEGRAM_BOT_TOKEN`, and enter the destination chat ID in `TELEGRAM_CHAT_ID`. Make sure the bot can send messages to that chat.
+- **Discord:** create a webhook under the channel's **Integrations → Webhooks** settings and enter `DISCORD_WEBHOOK_URL`. Optionally enter a public image URL in `DISCORD_ICON_URL`; leave it blank to use the webhook avatar.
+
+Configuration is stored in `data/settings.json`. Existing notification variables in `.env` are used until you first save these settings; afterward, the saved settings take priority and those variables can be removed from `.env`. Include settings.json in backups and keep it private: it contains notification credentials.
+
+The agent selector only changes which configuration is displayed; it does not disable the other agent. To enable both, select Telegram, check **Active** and fill in its fields, then select Discord and do the same. Click **Save settings** to save both configurations together. To disable an agent, select it, uncheck **Active**, and save. Its credentials remain available if you enable it again later. `DISCORD_ICON_URL` is optional; active Telegram requires both fields, and active Discord requires a valid Discord webhook URL.
+
+Notifications include the member, service, amount, month, and admin confirmation link. Failure on one channel does not prevent the other from sending. Discord messages suppress mentions. See the [Discord webhook documentation](https://docs.discord.com/developers/resources/webhook#execute-webhook).
 
 ## First-time setup in the admin panel
 
 1. Sign in at `/admin`.
 2. Open **Services** and edit the initial service or add another. Enter its payment URL, set the reminder day and hour, and make sure it is active.
 3. Open **Members**, add each person, and select their services. Enter the monthly amount for each service and provide a working email address.
-4. Open **Settings** and choose Romanian or English. The selection controls both the application interface and member emails.
+4. Open **Settings** and choose Romanian or English. The selection controls both the application interface and member emails. Under **Notifications**, optionally configure and activate Telegram, Discord, or both, then save.
 5. Use **Payments** to review reported payments and record advance payments.
 
 No payment links are preconfigured. Verify each service's payment URL before inviting members.
@@ -174,7 +178,7 @@ No payment links are preconfigured. Verify each service's payment URL before inv
 1. At the configured day and hour for an active service, PayReminder checks for members who are active, subscribed to that service, and have no payment recorded for the current month.
 2. It sends each matching member a service-specific email with the amount and a link to their personal page.
 3. The member opens the service's payment link and reports the payment from their personal page.
-4. PayReminder optionally sends a Telegram notification to the admin. The notification is informational; it does not verify the transaction.
+4. PayReminder optionally sends Telegram and/or Discord notifications to the admin. The notification is informational; it does not verify the transaction.
 5. The admin checks the payment with the service provider and confirms it in **Payments** or from the dashboard.
 6. If enabled, PayReminder sends the member a confirmation email.
 
@@ -190,7 +194,7 @@ Advance payments are recorded as confirmed and cover the selected consecutive mo
 | `/admin/services` | Add, edit, activate/deactivate, and schedule services. |
 | `/admin/members` | Manage members, service assignments, amounts, and personal links. |
 | `/admin/payments` | Filter payment reports, confirm or remove records, and record advance payments. |
-| `/admin/settings` | Choose the application and email language. |
+| `/admin/settings` | Choose the application and email language; configure and activate Telegram and Discord notifications, including an optional Discord icon URL. |
 
 ## Data, backups, and updates
 
@@ -199,9 +203,9 @@ All application data is stored as JSON files in `data/`:
 - `services.json` — services and reminder schedules;
 - `members.json` — member details and service assignments;
 - `payments.json` — reported and confirmed payments;
-- `settings.json` — language preference and reminder bookkeeping.
+- `settings.json` — language preference, notification agent settings and credentials, and reminder bookkeeping.
 
-Back up the entire `data/` directory and `.env` regularly. The `.env` file contains credentials and secrets; keep it private and do not commit it to Git. Restoring the data directory and matching `.env` restores the local application state.
+Back up the entire `data/` directory and `.env` regularly. Both `.env` and `data/settings.json` contain credentials and secrets; keep them private and do not commit them to Git. Restoring the data directory and matching `.env` restores the local application state, including saved notification configurations.
 
 To update an existing Linux installation, first make sure any local changes are committed or backed up, then pull and restart:
 
@@ -217,7 +221,8 @@ If `git pull` reports local changes would be overwritten, inspect them before di
 ## Troubleshooting
 
 - **Emails are not sent:** Check `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASS`; review `journalctl -u payreminder -f`. Emails are disabled when SMTP credentials are missing.
-- **Telegram notifications are missing:** Check both Telegram variables, make sure the bot can message the configured chat, and inspect the service logs.
+- **Discord notifications are missing:** In **Admin → Settings → Notifications**, select Discord, make sure **Active** is checked, verify the webhook URL, and save. Make sure the webhook still exists and can post to the channel, and inspect the service logs. For a custom avatar, check that `DISCORD_ICON_URL` is publicly accessible.
+- **Telegram notifications are missing:** In **Admin → Settings → Notifications**, select Telegram, make sure **Active** is checked, verify the bot token and chat ID, and save. Make sure the bot can message the configured chat, and inspect the service logs.
 - **Links point to localhost or the wrong host:** Set `APP_URL` to the public HTTPS address and restart the service.
 - **Scheduled reminders do not run:** Keep the service active, check the server timezone, confirm the service is active, and review its reminder day/hour and logs.
 - **Admin login stops working after a restart:** Admin sessions are stored in memory, so a restart requires signing in again.
@@ -229,5 +234,7 @@ If `git pull` reports local changes would be overwritten, inspect them before di
 npm install
 npm run dev
 ```
+
+Run notification configuration and delivery tests with `npm test`.
 
 `npm run dev` starts Node's watch mode. The application is built with Express and EJS, uses `node-cron` for reminders, and uses Nodemailer for SMTP email.

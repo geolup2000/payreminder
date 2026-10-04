@@ -105,7 +105,7 @@ else
     cp .env.example .env
     warn "Created .env from .env.example. COMPLETE IT before using the app:
      nano $APP_DIR/.env
-     (at least ADMIN_USER, ADMIN_PASSWORD, SMTP_*, TELEGRAM_*, and APP_URL with your public URL)"
+     (at least ADMIN_USER, ADMIN_PASSWORD, SMTP_*, and APP_URL with your public URL)"
   else
     err "Neither .env nor .env.example exists. Stopping. Add a configuration file manually."
     exit 1
@@ -203,10 +203,11 @@ echo "  Config file  : $APP_DIR/.env"
 echo
 echo "Notes:"
 echo "  - After changing .env: systemctl restart payreminder"
+echo "  - Configure Telegram and Discord notifications in Admin > Settings."
 echo "  - Configure reminder schedules for each service in the admin panel."
 echo "  - For internet access: set up a reverse proxy (Caddy/Nginx) and port forwarding in Proxmox."
 echo "  - Follow logs in real time: journalctl -u payreminder -f"
 echo
 warn "Before using the app, open $APP_DIR/.env and enter your actual values
-     (admin username and password, SMTP details, and Telegram settings), then restart the service.
+     (admin username and password, and SMTP details), then restart the service.
      Run: nano $APP_DIR/.env && systemctl restart payreminder"

@@ -4,6 +4,8 @@ const config = require('./config');
 const db = require('./db');
 const { sendReminderEmail, sendConfirmEmail } = require('./mailer');
 const telegram = require('./telegram');
+const discord = require('./discord');
+const { getNotificationSettings, notificationSettingsFromBody } = require('./notification-settings');
 const { startScheduler, sendRemindersTo } = require('./scheduler');
 const { currentMonth, localizedMonth, formatMoney } = require('./format');
 
@@ -220,17 +222,19 @@ app.post('/p/:token/pay', async (req, res) => {
 });
 
 async function notifyReported(member, service, month, payment) {
-  try {
-    await telegram.notifyPaymentReported(
-      member,
-      localizedMonth(month, appLanguage()),
-      formatMoney(payment.amount, config.currency),
-      `${config.appUrl}/admin/payments?month=${encodeURIComponent(month)}&serviceId=${encodeURIComponent(service.id || '')}&highlight=${payment.id}`,
-      service && service.name
-    );
-  } catch (err) {
-    console.error('[pay] telegram esuat:', err.message);
-  }
+  await Promise.all([['telegram', telegram], ['discord', discord]].map(async ([name, channel]) => {
+    try {
+      await channel.notifyPaymentReported(
+        member,
+        localizedMonth(month, appLanguage()),
+        formatMoney(payment.amount, config.currency),
+        `${config.appUrl}/admin/payments?month=${encodeURIComponent(month)}&serviceId=${encodeURIComponent(service.id || '')}&highlight=${payment.id}`,
+        service && service.name
+      );
+    } catch (err) {
+      console.error(`[pay] ${name} esuat:`, err.message);
+    }
+  }));
 }
 
 // -------------------------------------------------------------
@@ -269,7 +273,10 @@ app.get('/admin/logout', (req, res) => {
 // Admin - settings
 // -------------------------------------------------------------
 app.get('/admin/settings', requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store');
   res.render('admin/settings', {
+    notifications: getNotificationSettings(),
+    error: null,
     language: appLanguage(),
     saved: req.query.saved === '1',
   });
@@ -277,7 +284,16 @@ app.get('/admin/settings', requireAdmin, (req, res) => {
 
 app.post('/admin/settings', requireAdmin, (req, res) => {
   const language = req.body.language === 'en' ? 'en' : 'ro';
-  db.updateSettings({ language });
+  try {
+    const notifications = notificationSettingsFromBody(req.body);
+    db.updateSettings({ language, notifications });
+  } catch (err) {
+    res.set('Cache-Control', 'no-store');
+    return res.status(400).render('admin/settings', { saved: false, error: err.message, notifications: {
+      telegram: { active: req.body.telegramActive === 'on', botToken: req.body.telegramBotToken || '', chatId: req.body.telegramChatId || '' },
+      discord: { active: req.body.discordActive === 'on', webhookUrl: req.body.discordWebhookUrl || '', iconUrl: req.body.discordIconUrl || '' },
+    } });
+  }
   res.redirect('/admin/settings?saved=1');
 });
 

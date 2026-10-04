@@ -4,6 +4,7 @@
   "description": "Reminder pentru plati recurente la mai multe servicii, cu confirmare si notificari",
   "main": "src/server.js",
   "scripts": {
+    "test": "node --test",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js"
   },

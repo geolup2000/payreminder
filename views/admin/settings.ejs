@@ -13,9 +13,10 @@
 <%- include('../partials/admin-head', { currentPath: '/admin/settings' }) %>
 
   <div class="title">Setări</div>
-  <p class="subtitle">Configurează limba aplicației și a emailurilor trimise membrilor.</p>
+  <p class="subtitle">Configurează limba aplicației și notificările de plată.</p>
 
   <% if (saved) { %><div class="alert alert-ok">Setările au fost salvate.</div><% } %>
+  <% if (error) { %><div class="alert alert-err" role="alert"><%= error %></div><% } %>
 
   <div class="card" style="max-width:560px">
     <form method="post" action="/admin/settings">
@@ -27,10 +28,62 @@
         </select>
         <p class="muted" style="margin:6px 0 0">Se aplică interfeței aplicației și emailurilor de reamintire și confirmare.</p>
       </div>
+      <h2>Notificări</h2>
+      <div class="form-group">
+        <label for="notificationAgent">Agent</label>
+        <select id="notificationAgent">
+          <option value="telegram">Telegram</option>
+          <option value="discord" <%= notifications.discord.active && !notifications.telegram.active ? 'selected' : '' %>>Discord</option>
+        </select>
+        <p class="muted">Poți activa separat fiecare agent. Modificările se aplică după salvare.</p>
+      </div>
+      <% for (const agent of ['telegram', 'discord']) { %>
+      <section data-agent="<%= agent %>">
+        <div class="form-group">
+          <label><input type="checkbox" name="<%= agent %>Active" data-active <%= notifications[agent].active ? 'checked' : '' %>> Activ</label>
+        </div>
+        <div data-fields <%= notifications[agent].active ? '' : 'hidden' %>>
+          <% if (agent === 'telegram') { %>
+          <div class="form-group">
+            <label for="telegramBotToken">TELEGRAM_BOT_TOKEN</label>
+            <input id="telegramBotToken" name="telegramBotToken" type="password" autocomplete="new-password" value="<%= notifications.telegram.botToken %>">
+          </div>
+          <div class="form-group">
+            <label for="telegramChatId">TELEGRAM_CHAT_ID</label>
+            <input id="telegramChatId" name="telegramChatId" type="text" value="<%= notifications.telegram.chatId %>">
+          </div>
+          <% } else { %>
+          <div class="form-group">
+            <label for="discordWebhookUrl">DISCORD_WEBHOOK_URL</label>
+            <input id="discordWebhookUrl" name="discordWebhookUrl" type="password" autocomplete="new-password" value="<%= notifications.discord.webhookUrl %>">
+          </div>
+          <div class="form-group">
+            <label for="discordIconUrl">DISCORD_ICON_URL (opțional)</label>
+            <input id="discordIconUrl" name="discordIconUrl" type="text" inputmode="url" value="<%= notifications.discord.iconUrl %>">
+          </div>
+          <% } %>
+        </div>
+      </section>
+      <% } %>
       <div class="button-row"><button class="btn btn-indigo" type="submit">Salvează setările</button></div>
     </form>
   </div>
 
+<script>
+  const agentSelect = document.getElementById('notificationAgent');
+  const agentSections = document.querySelectorAll('[data-agent]');
+  function updateNotificationFields() {
+    for (const section of agentSections) {
+      section.hidden = section.dataset.agent !== agentSelect.value;
+      section.querySelector('[data-fields]').hidden = !section.querySelector('[data-active]').checked;
+    }
+  }
+  agentSelect.addEventListener('change', updateNotificationFields);
+  for (const checkbox of document.querySelectorAll('[data-active]')) {
+    checkbox.addEventListener('change', updateNotificationFields);
+  }
+  updateNotificationFields();
+</script>
 <%- include('../partials/admin-foot', { currentPath: '/admin/settings' }) %>
 </body>
 </html>

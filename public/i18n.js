@@ -2,6 +2,13 @@
   if (document.documentElement.lang !== 'en') return;
 
   const translations = {
+    'Configurează limba aplicației și notificările de plată.': 'Configure the application language and payment notifications.',
+    'Notificări': 'Notifications', 'Agent': 'Agent',
+    'Poți activa separat fiecare agent. Modificările se aplică după salvare.': 'You can enable each agent separately. Changes apply after saving.',
+    'DISCORD_ICON_URL (opțional)': 'DISCORD_ICON_URL (optional)',
+    'Completează tokenul botului și Chat ID pentru Telegram.': 'Enter the bot token and Chat ID for Telegram.',
+    'Introdu un URL valid pentru webhookul Discord.': 'Enter a valid Discord webhook URL.',
+    'Introdu un URL HTTP sau HTTPS valid pentru icon.': 'Enter a valid HTTP or HTTPS icon URL.',
     'Meniu': 'MENU', 'MENIU': 'MENU', 'Prezentare': 'Dashboard', 'Utilizatori': 'Members', 'Servicii': 'Services', 'Plăți': 'Payments', 'Setări': 'Settings',
     'Administrator': 'Administrator', 'Cont local': 'Local account', 'Ieșire din cont': 'Log out',
     'Plățile recurente,': 'Recurring payments,', 'fără griji.': 'made simple.', 'Un loc simplu pentru reamintiri, plăți și confirmări lunare.': 'A simple place for monthly reminders, payments, and confirmations.', 'Accesează panoul': 'Open admin panel', 'Plăți organizate, în fiecare lună': 'Organized payments, every month',
