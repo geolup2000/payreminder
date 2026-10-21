@@ -31,6 +31,7 @@
       <div class="alert alert-err">Utilizator sau parola incorecta.</div>
     <% } %>
     <form method="post" action="/admin/login">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="form-group">
         <label for="username">Utilizator</label>
         <input type="text" id="username" name="username" autocomplete="username" autofocus required>

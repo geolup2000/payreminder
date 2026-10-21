@@ -32,10 +32,17 @@ find_app() {
   local d
   for d in "$1" "$SCRIPT_DIR" /opt/payreminder; do
     if [[ -n "$d" && -f "$d/package.json" ]]; then
-      echo "$d"; return 0
+      (cd -- "$d" && pwd -P); return $?
     fi
   done
   return 1
+}
+
+validate_service_path() {
+  if [[ ! "$1" =~ ^/[a-zA-Z0-9._/-]+$ ]]; then
+    err "Unsupported service path: use an absolute path containing only letters, digits, /, ., _, and -."
+    return 1
+  fi
 }
 
 APP_DIR="$(find_app "${1:-}")" || {
@@ -43,6 +50,7 @@ APP_DIR="$(find_app "${1:-}")" || {
      or specify the project directory: ./install.sh /path/to/project"
   exit 1
 }
+validate_service_path "$APP_DIR"
 info "Project found at: $APP_DIR"
 
 # ------------------------------------------------------------
@@ -52,28 +60,30 @@ distro="$(. /etc/os-release && echo "${ID:-unknown}-${VERSION_ID:-unknown}")"
 info "System: $distro"
 
 # ------------------------------------------------------------
-# 3. Install Node.js (>=18) if needed
+# 3. Install Node.js (>=20; Node 22 recommended) if needed
 # ------------------------------------------------------------
+node_supported() {
+  local version
+  command -v node >/dev/null 2>&1 || return 1
+  version="$(node --version)" || return 1
+  [[ "$version" =~ ^v([0-9]+)\. ]] && (( 10#${BASH_REMATCH[1]} >= 20 ))
+}
+
 install_node() {
-  if command -v node >/dev/null 2>&1 && node -e 'process.exit(process.versions.node.split(".")[0] < 18 ? 1 : 0)' >/dev/null 2>&1; then
+  if node_supported; then
     info "Node.js is already installed: $(node --version)"
     return
   fi
-  step "Installing Node.js LTS (NodeSource)..."
+  step "Installing Node.js 22 (NodeSource)..."
   apt-get update -y
   apt-get install -y curl ca-certificates
-  if command -v node >/dev/null 2>&1; then
-    warn "Old Node.js version: $(node --version). Replacing it with LTS."
+  if ! curl -fsSL https://deb.nodesource.com/setup_22.x | bash -; then
+    warn "NodeSource setup failed. Trying the distribution package; Node.js >=20 is required."
   fi
-  if [[ "$(command -v apt-get)" ]]; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - || {
-      err "NodeSource setup failed. Trying the default package (which may be older)."
-      apt-get install -y nodejs
-    }
-  fi
-  apt-get install -y nodejs || true
-  if ! command -v node >/dev/null 2>&1; then
-    err "Node.js was not installed. Install it manually and run this script again."
+  apt-get install -y nodejs
+  hash -r
+  if ! node_supported; then
+    err "Node.js >=20 is required (Node 22 recommended). Installed/fallback version is unsupported; install a supported version manually and rerun."
     exit 1
   fi
   info "Node.js installed: $(node --version)"
@@ -96,61 +106,85 @@ info "Dependencies installed."
 # ------------------------------------------------------------
 # 5. .env file
 # ------------------------------------------------------------
-step "Checking .env file..."
-if [[ -f .env ]]; then
-  warn ".env already exists; keeping it. Check that its values are correct:
-     nano $APP_DIR/.env"
-else
-  if [[ -f .env.example ]]; then
-    cp .env.example .env
-    warn "Created .env from .env.example. COMPLETE IT before using the app:
-     nano $APP_DIR/.env
-     (at least ADMIN_USER, ADMIN_PASSWORD, SMTP_*, and APP_URL with your public URL)"
-  else
-    err "Neither .env nor .env.example exists. Stopping. Add a configuration file manually."
-    exit 1
+initialize_env() {
+  if [[ -e .env || -L .env ]]; then
+    warn "Existing .env preserved without changes."
+    return
   fi
-fi
-
-# ------------------------------------------------------------
-# 6. Configure APP_URL (prompt)
-# ------------------------------------------------------------
-if [[ ! -s .env ]] || ! grep -qE '^APP_URL=http' .env || grep -q '^APP_URL=http://localhost:3000$' .env; then
-  echo
-  read -r -p "Public application URL (e.g. https://reminder.example.com) [http://localhost:3000]: " PUBLIC_URL || true
-  PUBLIC_URL="${PUBLIC_URL:-http://localhost:3000}"
-  if grep -q '^APP_URL=' .env; then
-    sed -i "s|^APP_URL=.*|APP_URL=${PUBLIC_URL}|" .env
-  else
-    echo "APP_URL=${PUBLIC_URL}" >> .env
+  if [[ ! -f .env.example ]]; then
+    err "Neither .env nor .env.example exists. Add a configuration file manually."
+    return 1
   fi
-  info "APP_URL set to: $PUBLIC_URL"
-fi
-
-# ------------------------------------------------------------
-# 7. Set the initial application language
-# ------------------------------------------------------------
-step "Setting the initial application language..."
-mkdir -p data
-node <<'NODE'
-const fs = require('fs');
-const file = 'data/settings.json';
-let settings = {};
-try {
-  settings = JSON.parse(fs.readFileSync(file, 'utf8'));
-} catch {}
-if (!['en', 'ro'].includes(settings.language)) {
-  settings.language = settings.emailLanguage === 'ro' ? 'ro' : 'en';
-}
-fs.writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`);
+  (
+    umask 077
+    node <<'NODE'
+  const fs = require('node:fs');
+  const { randomBytes } = require('node:crypto');
+  const template = fs.readFileSync('.env.example', 'utf8');
+  const contents = template
+    .replace(/^ADMIN_PASSWORD=.*$/m, `ADMIN_PASSWORD=${randomBytes(24).toString('hex')}`)
+    .replace(/^SESSION_SECRET=.*$/m, `SESSION_SECRET=${randomBytes(32).toString('hex')}`);
+  fs.writeFileSync('.env', contents, { mode: 0o600, flag: 'wx' });
 NODE
-info "Application language is set to: $(node -p "require('./data/settings.json').language")"
+  )
+  info "Created private .env (mode 600) with random admin password and session secret. Inspect $APP_DIR/.env locally to retrieve your password; credentials are not printed."
+}
+
+step "Checking .env file..."
+NEW_INSTALL=false
+[[ -e .env || -L .env ]] || NEW_INSTALL=true
+initialize_env
+
+validate_env() {
+  node <<'NODE'
+  try {
+    const fs = require('node:fs');
+    const dotenv = require('dotenv');
+    const values = dotenv.parse(fs.readFileSync('.env'));
+    // The service reads .env, not the invoking shell's credential overrides.
+    for (const key of ['ADMIN_USER', 'ADMIN_PASSWORD', 'SESSION_SECRET', 'APP_URL']) delete process.env[key];
+    Object.assign(process.env, values);
+    require('./src/config').validateRuntimeConfig();
+  } catch (error) {
+    console.error('[install] Configuration validation failed: ' + error.message);
+    console.error('[install] Existing files are unchanged. Edit .env locally before starting the service.');
+    process.exit(1);
+  }
+NODE
+}
+
+step "Validating runtime configuration before service setup..."
+validate_env
 
 # ------------------------------------------------------------
-# 8. systemd service
+# 6. Initial language (new installations only)
+# ------------------------------------------------------------
+initialize_language() {
+  if [[ -e data/settings.json || -L data/settings.json ]]; then
+    info "Existing application settings preserved without changes."
+    return
+  fi
+  mkdir -p data
+  (
+    umask 077
+    node <<'NODE'
+  const fs = require('node:fs');
+  fs.writeFileSync('data/settings.json', JSON.stringify({ language: 'en' }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+NODE
+  )
+  info "Initial application language set to English."
+}
+
+if [[ "$NEW_INSTALL" == true ]]; then
+  initialize_language
+fi
+
+# ------------------------------------------------------------
+# 7. systemd service
 # ------------------------------------------------------------
 step "Creating the systemd service..."
 NODE_BIN="$(command -v node)"
+validate_service_path "$NODE_BIN"
 SERVICE=/etc/systemd/system/payreminder.service
 
 # Remove the old service name if it is still installed.
@@ -185,7 +219,7 @@ else
 fi
 
 # ------------------------------------------------------------
-# 9. Summary
+# 8. Summary
 # ------------------------------------------------------------
 step "Done! Installation summary:"
 echo "  Application  : $APP_DIR"
@@ -208,6 +242,6 @@ echo "  - Configure reminder schedules for each service in the admin panel."
 echo "  - For internet access: set up a reverse proxy (Caddy/Nginx) and port forwarding in Proxmox."
 echo "  - Follow logs in real time: journalctl -u payreminder -f"
 echo
-warn "Before using the app, open $APP_DIR/.env and enter your actual values
-     (admin username and password, and SMTP details), then restart the service.
-     Run: nano $APP_DIR/.env && systemctl restart payreminder"
+warn "Inspect $APP_DIR/.env locally to retrieve/store your admin password securely.
+     Configure APP_URL and SMTP as needed, then restart the service.
+     Keep the application port firewalled until HTTPS and setup are complete."

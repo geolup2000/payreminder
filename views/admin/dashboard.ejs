@@ -54,6 +54,7 @@
       <div><h3 style="margin:0">Plățile utilizatorilor</h3><p class="muted" style="margin:3px 0 0">Statusul abonamentelor pentru luna selectată</p></div>
       <div class="grow"></div>
       <form class="button-row" method="post" action="/admin/remind">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
         <input type="hidden" name="serviceId" value="<%= selectedServiceId %>">
         <button class="btn btn-indigo btn-sm" type="submit">📧 Trimite reamintiri acum</button>
       </form>
@@ -87,12 +88,14 @@
             <td class="right" data-label="Acțiuni">
               <div class="table-actions">
                 <form method="post" action="/admin/remind">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <input type="hidden" name="memberId" value="<%= row.member.id %>">
                   <input type="hidden" name="serviceId" value="<%= row.serviceId %>">
                   <button class="btn btn-gray btn-sm" type="submit">reaminteste</button>
                 </form>
                 <% if (row.payment && row.payment.status === 'pending') { %>
                 <form method="post" action="/admin/payments/<%= row.payment.id %>/confirm">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <input type="hidden" name="returnTo" value="/admin">
                   <button class="btn btn-green btn-sm" type="submit">confirmă</button>
                 </form>

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { normalizeAmount, normalizePersistedAmount, multiplyAmount } = require('./money');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const FILES = {
@@ -16,17 +17,122 @@ const DEFAULT_REMINDER_HOUR = () => 10;
 
 function readJson(file, fallback) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return fallback;
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+    const valid = file === FILES.settings
+      ? object(data)
+      : Array.isArray(data) && data.every(record => object(record) && typeof record.id === 'string' && record.id.length > 0);
+    if (!valid) throw new TypeError(`Malformed data in ${path.basename(file)}`);
+    if (file === FILES.settings) {
+      for (const field of ['lastReminderMonths', 'reminderDeliveries']) {
+        if (data[field] !== undefined && !object(data[field])) throw new TypeError(`Malformed settings.${field}`);
+      }
+    } else {
+      for (const record of data) {
+        if (record.active !== undefined && typeof record.active !== 'boolean') throw new TypeError('Malformed active flag');
+        if (file === FILES.services) {
+          for (const [field, min, max] of [['reminderDay', 1, 31], ['reminderHour', 0, 23]]) {
+            if (record[field] !== undefined &&
+                !((typeof record[field] === 'number' || typeof record[field] === 'string') &&
+                  /^\d+$/.test(String(record[field])) && Number(record[field]) >= min && Number(record[field]) <= max)) {
+              throw new TypeError(`Malformed service.${field}`);
+            }
+          }
+        }
+        if (file === FILES.payments && record.amount !== undefined) {
+          try { record.amount = normalizePersistedAmount(record.amount); }
+          catch (error) { throw new TypeError(`Malformed payment amount: ${error.message}`); }
+        }
+      }
+    }
+    if (file === FILES.members) {
+      for (const member of data) {
+        if (member.amount !== undefined) member.amount = normalizePersistedAmount(member.amount);
+        if (member.memberships !== undefined) {
+          if (!Array.isArray(member.memberships) || !member.memberships.every(m => object(m) && typeof m.serviceId === 'string')) {
+            throw new TypeError('Malformed member memberships');
+          }
+          for (const membership of member.memberships) membership.amount = normalizePersistedAmount(membership.amount);
+        }
+      }
+    }
+    return data;
+  } catch (error) {
+    if (error.code === 'ENOENT') return fallback;
+    throw error;
   }
 }
 
 function writeJson(file, data) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, file);
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  const tmp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  let created = false;
+  try {
+    const fd = fs.openSync(tmp, 'wx', 0o600);
+    created = true;
+    try {
+      fs.writeFileSync(fd, JSON.stringify(data, null, 2));
+      fs.fsyncSync(fd);
+    } finally { fs.closeSync(fd); }
+    fs.renameSync(tmp, file);
+  } finally {
+    if (created && fs.existsSync(tmp)) fs.unlinkSync(tmp);
+  }
+}
+
+let releaseDataLock;
+
+// Hold for the entire server lifetime. Never unlink another owner's lock, even
+// when its PID is stale: PID reuse and competing reclaimers make that unsafe.
+function acquireDataLock() {
+  if (releaseDataLock) return releaseDataLock;
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  const file = path.join(DATA_DIR, '.payreminder.lock');
+  const owner = { pid: process.pid, token: crypto.randomUUID() };
+  let fd;
+  try {
+    fd = fs.openSync(file, 'wx', 0o600);
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    let state = 'unreadable or malformed';
+    try {
+      const previous = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (Number.isSafeInteger(previous.pid) && previous.pid > 0) {
+        try { process.kill(previous.pid, 0); state = `live PID ${previous.pid}`; }
+        catch (probe) { state = probe.code === 'ESRCH' ? `stale PID ${previous.pid}` : `unverifiable PID ${previous.pid}`; }
+      }
+    } catch { /* Fail closed; incomplete lock creation may still be in flight. */ }
+    throw new Error(`Data directory lock exists (${state}): ${file}. Manual recovery required: stop all instances and verify the owner is gone before removing the lock.`);
+  }
+  try {
+    fs.writeFileSync(fd, JSON.stringify(owner));
+    fs.fsyncSync(fd);
+  } catch (error) {
+    fs.closeSync(fd);
+    fs.unlinkSync(file);
+    throw error;
+  }
+  fs.closeSync(fd);
+  const onInterrupt = () => process.exit(130);
+  const onTerminate = () => process.exit(143);
+  const release = () => {
+    try {
+      const current = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (current.pid === owner.pid && current.token === owner.token) fs.unlinkSync(file);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    } finally {
+      process.removeListener('exit', release);
+      process.removeListener('SIGINT', onInterrupt);
+      process.removeListener('SIGTERM', onTerminate);
+      releaseDataLock = undefined;
+    }
+  };
+  releaseDataLock = release;
+  process.once('exit', release);
+  process.once('SIGINT', onInterrupt);
+  process.once('SIGTERM', onTerminate);
+  return release;
 }
 
 const uuid = () => crypto.randomUUID();
@@ -168,7 +274,7 @@ function normalizeMemberships({ memberships, serviceIds, serviceId, amount } = {
   const push = (id, amt) => {
     if (!validIds.has(id) || seen.has(id)) return;
     seen.add(id);
-    result.push({ serviceId: id, amount: parseFloat(amt) || 0 });
+    result.push({ serviceId: id, amount: normalizeAmount(amt === undefined ? 0 : amt) });
   };
   if (Array.isArray(memberships)) {
     for (const m of memberships) {
@@ -181,7 +287,7 @@ function normalizeMemberships({ memberships, serviceIds, serviceId, amount } = {
   } else {
     push(services[0].id, amount);
   }
-  if (!result.length) result.push({ serviceId: services[0].id, amount: parseFloat(amount) || 0 });
+  if (!result.length) result.push({ serviceId: services[0].id, amount: normalizeAmount(amount === undefined ? 0 : amount) });
   return result;
 }
 
@@ -189,11 +295,10 @@ function getMembers() {
   const members = readJson(FILES.members, []);
   const services = getServices();
   const serviceIds = new Set(services.map((service) => service.id));
-  let changed = false;
   for (const member of members) {
     if (!Array.isArray(member.memberships) || member.memberships.length === 0) {
       // Migrare: vechiul format cu un singur serviciu.
-      const legacyAmount = parseFloat(member.amount) || 0;
+      const legacyAmount = member.amount === undefined ? 0 : member.amount;
       const legacyIds = Array.isArray(member.serviceIds) ? member.serviceIds : [];
       const rawIds = legacyIds.length
         ? legacyIds
@@ -202,7 +307,6 @@ function getMembers() {
         serviceId: id,
         amount: legacyAmount,
       }));
-      changed = true;
     }
 
     // Normalizare memberships: pastram doar servicii existente, fara duplicate.
@@ -211,9 +315,8 @@ function getMembers() {
     for (const m of member.memberships) {
       if (!m || !serviceIds.has(m.serviceId) || seen.has(m.serviceId)) continue;
       seen.add(m.serviceId);
-      normalized.push({ serviceId: m.serviceId, amount: parseFloat(m.amount) || 0 });
+      normalized.push({ serviceId: m.serviceId, amount: normalizeAmount(m.amount) });
     }
-    if (normalized.length !== (member.memberships || []).length) changed = true;
     if (!normalized.length) normalized.push({ serviceId: services[0].id, amount: 0 });
     member.memberships = normalized;
 
@@ -221,14 +324,12 @@ function getMembers() {
     const first = normalized[0];
     if (member.serviceId !== first.serviceId) {
       member.serviceId = first.serviceId;
-      changed = true;
     }
     if (Number(member.amount) !== Number(first.amount)) {
       member.amount = first.amount;
-      changed = true;
     }
   }
-  if (changed) writeJson(FILES.members, members);
+  // Legacy migration is an in-memory view; persist only on an explicit write.
   return members;
 }
 
@@ -249,13 +350,13 @@ function getMemberships(member) {
   const services = getServices();
   return member.memberships
     .filter((m) => services.some((service) => service.id === m.serviceId))
-    .map((m) => ({ serviceId: m.serviceId, amount: parseFloat(m.amount) || 0 }));
+    .map((m) => ({ serviceId: m.serviceId, amount: normalizeAmount(m.amount) }));
 }
 
 function getMemberMembership(member, serviceId) {
   if (!member || !Array.isArray(member.memberships)) return null;
   const membership = member.memberships.find((m) => m.serviceId === serviceId);
-  return membership ? { serviceId: membership.serviceId, amount: parseFloat(membership.amount) || 0 } : null;
+  return membership ? { serviceId: membership.serviceId, amount: normalizeAmount(membership.amount) } : null;
 }
 
 function createMember({ name, email, amount, active, serviceId, serviceIds, memberships }) {
@@ -295,16 +396,18 @@ function updateMember(id, patch) {
     patch.serviceId !== undefined;
   if (hasMembershipPatch) {
     const normalized = normalizeMemberships({
-      memberships: patch.memberships !== undefined ? patch.memberships : existing.memberships,
-      serviceIds: patch.serviceIds !== undefined ? patch.serviceIds : existing.serviceIds,
-      serviceId: patch.serviceId !== undefined ? patch.serviceId : existing.serviceId,
+      memberships: patch.memberships,
+      serviceIds: patch.serviceIds,
+      serviceId: patch.serviceId,
       amount: patch.amount !== undefined ? patch.amount : existing.amount,
     });
     next.memberships = normalized;
     next.serviceId = normalized[0].serviceId;
     next.amount = normalized[0].amount;
   } else if (patch.amount !== undefined) {
-    next.amount = parseFloat(patch.amount) || 0;
+    next.amount = normalizeAmount(patch.amount);
+    next.memberships = existing.memberships.map((membership, index) => index === 0
+      ? { ...membership, amount: next.amount } : membership);
   }
   next.email = String(patch.email !== undefined ? patch.email : existing.email).trim().toLowerCase();
   next.name = String(patch.name !== undefined ? patch.name : existing.name).trim();
@@ -326,20 +429,17 @@ function getPayments() {
   const services = getServices();
   const members = getMembers();
   const memberById = new Map(members.map((member) => [member.id, member]));
-  let changed = false;
   for (const payment of payments) {
     const member = memberById.get(payment.memberId);
     const service = getService(payment.serviceId) || (member && getServiceForMember(member)) || services[0];
     if (service && payment.serviceId !== service.id) {
       payment.serviceId = service.id;
-      changed = true;
     }
     if (!payment.serviceName && service) {
       payment.serviceName = service.name;
-      changed = true;
     }
   }
-  if (changed) writeJson(FILES.payments, payments);
+  // Preserve original legacy JSON until a payment mutation explicitly saves it.
   return payments;
 }
 
@@ -380,7 +480,7 @@ function createPayment({ member, service, month, months = 1, amount }) {
     month,
     endMonth,
     months: count,
-    amount,
+    amount: normalizeAmount(amount),
     status: 'pending',
     createdAt: nowIso(),
     confirmedAt: null,
@@ -395,7 +495,7 @@ function setPaymentStatus(id, status) {
   const index = payments.findIndex((payment) => payment.id === id);
   if (index === -1) return null;
   payments[index].status = status;
-  if (status === 'confirmed') payments[index].confirmedAt = nowIso();
+  payments[index].confirmedAt = status === 'confirmed' ? payments[index].confirmedAt || nowIso() : null;
   savePayments(payments);
   return payments[index];
 }
@@ -410,7 +510,7 @@ function markListConfirmed(ids, status) {
   for (const payment of payments) {
     if (ids.includes(payment.id)) {
       payment.status = status;
-      if (status === 'confirmed') payment.confirmedAt = now;
+      payment.confirmedAt = status === 'confirmed' ? payment.confirmedAt || now : null;
     }
   }
   savePayments(payments);
@@ -449,7 +549,35 @@ function setLastReminderMonth(serviceId, month) {
   return months[serviceId];
 }
 
+function migrateLegacyReminderDeliveries() {
+  const settings = getSettings();
+  if (settings.reminderDeliveryVersion === 1) return;
+  const deliveries = { ...settings.reminderDeliveries };
+  const services = getServices();
+  const members = getMembers();
+  // Snapshot legacy blanket suppression once, for current subscriptions only.
+  // New campaigns never write service/month completion markers. Preserve the
+  // old fields for compatibility, but the scheduler no longer gates on them.
+  for (const service of services) {
+    const month = settings.lastReminderMonths
+      ? settings.lastReminderMonths[service.id] : settings.lastReminderMonth;
+    if (!month) continue;
+    for (const member of members) {
+      if (!hasMembership(member, service.id)) continue;
+      const key = JSON.stringify([member.id, service.id, month]);
+      if (!deliveries[key]) deliveries[key] = `legacy:${month}`;
+    }
+  }
+  updateSettings({
+    reminderDeliveryVersion: 1,
+    ...(Object.keys(deliveries).length ? { reminderDeliveries: deliveries } : {}),
+  });
+}
+
 module.exports = {
+  acquireDataLock,
+  normalizeAmount,
+  multiplyAmount,
   getServices,
   saveServices,
   getService,
@@ -479,6 +607,7 @@ module.exports = {
   updateSettings,
   getLastReminderMonth,
   setLastReminderMonth,
+  migrateLegacyReminderDeliveries,
   uuid,
   nowIso,
   days,

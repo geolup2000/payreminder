@@ -1,16 +1,23 @@
 const express = require('express');
 const crypto = require('crypto');
+const { safeEqual, cookieValue, pruneExpiredSessions } = require('./security');
 const config = require('./config');
+config.validateRuntimeConfig();
 const db = require('./db');
+const releaseDataLock = db.acquireDataLock();
 const { sendReminderEmail, sendConfirmEmail } = require('./mailer');
 const telegram = require('./telegram');
 const discord = require('./discord');
 const { testNotification } = require('./notification-check');
 const { getNotificationSettings, notificationSettingsFromBody } = require('./notification-settings');
-const { startScheduler, sendRemindersTo } = require('./scheduler');
+const { startScheduler, stopScheduler, sendRemindersTo } = require('./scheduler');
+const { coordinateShutdown } = require('./shutdown');
 const { currentMonth, localizedMonth, formatMoney } = require('./format');
 
+const appUrl = new URL(config.appUrl);
+const secureCookie = appUrl.protocol === 'https:';
 const app = express();
+if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 app.set('view engine', 'ejs');
 app.set('views', require('path').join(__dirname, '..', 'views'));
 app.use(express.urlencoded({ extended: true }));
@@ -33,6 +40,7 @@ const sessions = new Map();
 const COOKIE = 'payreminder_session';
 
 function createSession() {
+  pruneExpiredSessions(sessions);
   const sid = crypto.randomBytes(24).toString('hex');
   sessions.set(sid, Date.now() + 30 * 86400000);
   return sid;
@@ -46,11 +54,10 @@ function isAuthed(req) {
 }
 
 app.use((req, res, next) => {
-  const raw = (req.headers.cookie || '').split(';').map((value) => value.trim());
-  const row = raw.find((value) => value.startsWith(COOKIE + '='));
+  pruneExpiredSessions(sessions);
+  const value = cookieValue(req.headers.cookie, COOKIE);
   req.cookies_sid = null;
-  if (row) {
-    const value = decodeURIComponent(row.split('=')[1]);
+  if (value) {
     const idx = value.lastIndexOf('.');
     if (idx !== -1) {
       const sid = value.slice(0, idx);
@@ -74,6 +81,36 @@ function requireAdmin(req, res, next) {
 }
 
 const hmac = (data) => crypto.createHmac('sha256', config.sessionSecret).update(data).digest('hex');
+
+app.use((req, res, next) => {
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('Origin') &&
+      req.get('Origin') !== new URL(config.appUrl).origin) {
+    return res.status(403).send('Invalid request origin');
+  }
+  next();
+});
+
+app.use('/admin', (req, res, next) => {
+  let token;
+  if (isAuthed(req)) {
+    token = hmac('csrf:' + req.cookies_sid);
+  } else {
+    token = cookieValue(req.headers.cookie, COOKIE + '_csrf');
+    const [nonce, signature] = token.split('.');
+    if (!nonce || !safeEqual(signature, hmac('csrf-login:' + nonce))) token = '';
+    if (!token && req.method === 'GET') {
+      const nonce = crypto.randomBytes(24).toString('hex');
+      token = nonce + '.' + hmac('csrf-login:' + nonce);
+      res.append('Set-Cookie', `${COOKIE}_csrf=${token}; Path=/admin; HttpOnly; SameSite=Lax; Max-Age=3600${secureCookie ? '; Secure' : ''}`);
+    }
+  }
+  res.locals.csrfToken = token;
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
+      (!token || !safeEqual(req.get('X-CSRF-Token') || req.body._csrf, token))) {
+    return res.status(403).send('Invalid CSRF token');
+  }
+  next();
+});
 
 // -------------------------------------------------------------
 // Helpers
@@ -100,8 +137,13 @@ function membershipsFromBody(body) {
   for (const id of ids) {
     if (seen.has(id)) continue;
     seen.add(id);
-    const amount = parseFloat(amounts[id]);
-    result.push({ serviceId: id, amount: Number.isFinite(amount) ? amount : 0 });
+    let amount;
+    try { amount = db.normalizeAmount(amounts[id]); }
+    catch (err) {
+      if (!(err instanceof TypeError) && !(err instanceof RangeError)) throw err;
+      throw new RangeError('Invalid amount');
+    }
+    result.push({ serviceId: id, amount });
   }
   return result;
 }
@@ -209,11 +251,7 @@ app.post('/p/:token/pay', async (req, res) => {
 
   const month = currentMonth();
   const existing = paymentForMemberService(member, service.id, month);
-  if (existing && existing.status === 'pending') {
-    await notifyReported(member, service, month, existing);
-    return res.redirect(`/p/${member.token}?done=1`);
-  }
-  if (existing && existing.status === 'confirmed') {
+  if (existing && (existing.status === 'pending' || existing.status === 'confirmed')) {
     return res.redirect(`/p/${member.token}?done=1`);
   }
   const payment = db.createPayment({ member, service, month, amount: membership.amount });
@@ -248,27 +286,41 @@ app.get('/admin/login', (req, res) => {
   res.render('admin/login', { error: req.query.err });
 });
 
-function safeEqual(given, stored) {
-  const a = Buffer.from(String(given));
-  const b = Buffer.from(String(stored));
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
+const loginFailures = new Map();
+const LOGIN_WINDOW = 15 * 60 * 1000;
 
 app.post('/admin/login', (req, res) => {
+  const now = Date.now();
+  for (const [key, entry] of loginFailures) {
+    if (entry.expires <= now) loginFailures.delete(key);
+  }
+  // Express honors forwarding headers only through explicitly trusted proxies.
+  const key = req.ip;
+  const failure = loginFailures.get(key);
+  if ((failure && failure.count >= 5) || (!failure && loginFailures.size >= 10000)) {
+    res.set('Retry-After', String(Math.ceil((((failure && failure.expires) || now + LOGIN_WINDOW) - now) / 1000)));
+    return res.status(429).send(appLanguage() === 'en' ? 'Too many login attempts. Try again later.' : 'Prea multe încercări de autentificare. Încearcă mai târziu.');
+  }
   const givenUser = String(req.body.username || '').trim();
   const givenPassword = String(req.body.password || '');
   const userOk = safeEqual(givenUser, config.adminUser);
   const passwordOk = safeEqual(givenPassword, config.adminPassword);
-  if (!userOk || !passwordOk) return res.redirect('/admin/login?err=1');
+  if (!userOk || !passwordOk) {
+    loginFailures.set(key, { count: (failure ? failure.count : 0) + 1, expires: failure ? failure.expires : now + LOGIN_WINDOW });
+    return res.redirect('/admin/login?err=1');
+  }
+  loginFailures.delete(key);
   const sid = createSession();
   const val = encodeURIComponent(sid) + '.' + hmac(sid);
-  res.setHeader('Set-Cookie', `${COOKIE}=${val}; Path=/; HttpOnly; Max-Age=${30 * 86400}`);
+  res.setHeader('Set-Cookie', `${COOKIE}=${val}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 86400}${secureCookie ? '; Secure' : ''}`);
   res.redirect('/admin');
 });
 
-app.get('/admin/logout', (req, res) => {
+app.get('/admin/logout', (req, res) => res.redirect('/admin'));
+
+app.post('/admin/logout', requireAdmin, (req, res) => {
   if (req.cookies_sid) sessions.delete(req.cookies_sid);
-  res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
+  res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie ? '; Secure' : ''}`);
   res.redirect('/admin/login');
 });
 
@@ -577,7 +629,7 @@ app.post('/admin/payments/advance', requireAdmin, (req, res) => {
     payment.month <= endMonth && (payment.endMonth || payment.month) >= month
   );
   if (overlap) return res.redirect(`/admin/payments?month=${encodeURIComponent(month)}&serviceId=${encodeURIComponent(service.id)}&err=perioadaOcupata`);
-  const payment = db.createPayment({ member, service, month, months, amount: membership.amount * months });
+  const payment = db.createPayment({ member, service, month, months, amount: db.multiplyAmount(membership.amount, months) });
   db.setPaymentStatus(payment.id, 'confirmed');
   const successMessage = appLanguage() === 'en'
     ? 'Advance payment recorded and confirmed.'
@@ -600,10 +652,11 @@ function monthIndexDiff(month, diff) {
 app.post('/admin/payments/:id/confirm', requireAdmin, async (req, res) => {
   const payment = db.getPayment(req.params.id);
   if (!payment) return res.redirect('/admin/payments?msg=nuExista');
-  db.setPaymentStatus(payment.id, 'confirmed');
+  const newlyConfirmed = payment.status !== 'confirmed';
+  if (newlyConfirmed) db.setPaymentStatus(payment.id, 'confirmed');
   const service = serviceForPayment(payment);
   const member = db.getMember(payment.memberId);
-  if (config.sendConfirmToMember && member && member.active) {
+  if (newlyConfirmed && config.sendConfirmToMember && member && member.active) {
     sendConfirmEmail(member, payment.month, { service, amount: payment.amount, endMonth: payment.endMonth || payment.month }).catch((err) =>
       console.error('[confirm] email utilizator esuat:', err.message)
     );
@@ -625,6 +678,14 @@ app.post('/admin/payments/:id/delete', requireAdmin, (req, res) => {
   res.redirect(`/admin/payments?month=${encodeURIComponent(payment.month)}&msg=${encodeURIComponent(message)}${serviceQuery(payment.serviceId)}`);
 });
 
+// Amount validation errors are client errors, never silently rounded or zeroed.
+app.use((err, req, res, next) => {
+  if (!(err instanceof RangeError)) return next(err);
+  res.status(400).send(appLanguage() === 'en'
+    ? 'Invalid amount. Use a nonnegative amount with at most two decimal places.'
+    : 'Sumă invalidă. Folosește o sumă nenegativă cu maximum două zecimale.');
+});
+
 // -------------------------------------------------------------
 app.use((req, res) =>
   res.status(404).render('member', { error: 'Pagina nu exista.', member: null, memberships: [], done: false, monthLabel: localizedMonth(currentMonth(), res.locals.language) })
@@ -635,6 +696,9 @@ const server = app.listen(config.port, () => {
   console.log(`[server] panou admin: http://localhost:${config.port}/admin`);
 });
 
+const shutdown = coordinateShutdown(server, stopScheduler, releaseDataLock, err => {
+  console.error('[shutdown] scheduler drain failed; data lock retained:', err.message);
+});
 startScheduler();
 
-module.exports = { app, server };
+module.exports = { app, server, shutdown };

@@ -39,6 +39,7 @@
     <h3 style="margin-top:0">Înregistrează o plată în avans</h3>
     <p class="muted">Plata va fi confirmată automat și va acoperi lunile consecutive selectate.</p>
     <form class="advance-payment-form" method="post" action="/admin/payments/advance">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="form-group">
         <label for="advance-member">Utilizator</label>
         <select id="advance-member" name="memberId" required>
@@ -111,10 +112,12 @@
               <div class="table-actions">
                 <% if (p.status !== 'confirmed') { %>
                   <form method="post" action="/admin/payments/<%= p.id %>/confirm">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                     <button class="btn btn-green btn-sm" type="submit">Confirm plata</button>
                   </form>
                 <% } %>
                 <form method="post" action="/admin/payments/<%= p.id %>/delete" onsubmit="return confirm('Stergi aceasta plata?')">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <button class="btn btn-danger btn-sm" type="submit">șterge</button>
                 </form>
               </div>

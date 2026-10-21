@@ -24,6 +24,7 @@
 
   <div class="card" style="max-width:560px">
     <form method="post" action="<%= service ? '/admin/services/' + service.id : '/admin/services' %>">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="form-group">
         <label for="name">Nume serviciu</label>
         <input type="text" id="name" name="name" required value="<%= service ? service.name : '' %>" placeholder="ex. Abonament online">

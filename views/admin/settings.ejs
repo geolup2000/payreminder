@@ -20,6 +20,7 @@
 
   <div class="card" style="max-width:560px">
     <form method="post" action="/admin/settings">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>">
       <div class="form-group">
         <label for="language">Limba aplicației</label>
         <select id="language" name="language">
@@ -105,7 +106,7 @@
         const body = new URLSearchParams(new FormData(button.form));
         body.set('agent', button.dataset.test);
         const response = await fetch('/admin/settings/test-notification', {
-          method: 'POST', body, headers: { Accept: 'application/json' },
+          method: 'POST', body, headers: { Accept: 'application/json', 'X-CSRF-Token': body.get('_csrf') },
         });
         if (response.redirected) throw new Error('Session expired');
         const data = await response.json();

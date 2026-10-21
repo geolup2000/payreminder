@@ -83,7 +83,8 @@
             <td class="right" data-label="Acțiuni">
               <div class="table-actions">
                 <a class="btn btn-gray btn-sm" href="/admin/members/<%= m.id %>">editează</a>
-                <form method="post" action="/admin/members/<%= m.id %>/delete" onsubmit="return confirm('Ștergi pe <%= m.name %>? Istoricul platilor ramane.')">
+                <form method="post" action="/admin/members/<%= m.id %>/delete" data-confirm="member" data-confirm-name="<%= m.name %>">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
                   <button class="btn btn-danger btn-sm" type="submit">șterge</button>
                 </form>
               </div>

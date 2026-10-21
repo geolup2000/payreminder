@@ -1,4 +1,5 @@
 <% const activeSection = currentPath.startsWith('/admin/settings') ? 'settings' : currentPath.startsWith('/admin/services') ? 'services' : currentPath.startsWith('/admin/members') ? 'members' : currentPath.startsWith('/admin/payments') ? 'payments' : 'dashboard'; %>
+<script src="/admin-security.js" defer></script>
 <div class="app-shell">
   <aside class="admin-sidebar">
     <a class="brand" href="/admin"><span class="brand-mark">p</span><span>pay<span class="brand-light">reminder</span></span></a>
@@ -12,7 +13,10 @@
     </nav>
     <div class="sidebar-bottom">
       <div class="sidebar-account"><span class="account-avatar">A</span><span><b>Administrator</b><small>Cont local</small></span></div>
-      <a class="logout-link" href="/admin/logout">Ieșire din cont <span>↗</span></a>
+      <form method="post" action="/admin/logout">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <button class="logout-link" type="submit" style="background:none;border:0;font:inherit;cursor:pointer;width:100%">Ieșire din cont <span>↗</span></button>
+      </form>
     </div>
   </aside>
   <main class="workspace">
