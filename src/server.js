@@ -11,7 +11,8 @@ const discord = require('./discord');
 const { testNotification } = require('./notification-check');
 const { getNotificationSettings, notificationSettingsFromBody } = require('./notification-settings');
 const { startScheduler, stopScheduler, sendRemindersTo } = require('./scheduler');
-const { coordinateShutdown } = require('./shutdown');
+const { coordinateShutdown, installShutdownSignals } = require('./shutdown');
+const { createPaymentNotifications } = require('./payment-notifications');
 const { currentMonth, localizedMonth, formatMoney } = require('./format');
 
 const appUrl = new URL(config.appUrl);
@@ -252,31 +253,33 @@ app.post('/p/:token/pay', async (req, res) => {
   const month = currentMonth();
   const existing = paymentForMemberService(member, service.id, month);
   if (existing && (existing.status === 'pending' || existing.status === 'confirmed')) {
+    await paymentNotifications.retry(existing.id);
     return res.redirect(`/p/${member.token}?done=1`);
   }
-  const payment = db.createPayment({ member, service, month, amount: membership.amount });
+  const payment = db.createPayment({ member, service, month, amount: membership.amount, reported: true });
   console.log('[pay] notificare plata:', member.name, service.name, month, payment.id);
-  await notifyReported(member, service, month, payment);
+  await paymentNotifications.retry(payment.id);
   res.redirect(`/p/${member.token}?done=1`);
 });
 
-async function notifyReported(member, service, month, payment) {
-  const language = appLanguage();
-  await Promise.all([['telegram', telegram], ['discord', discord]].map(async ([name, channel]) => {
-    try {
-      await channel.notifyPaymentReported(
-        member,
-        localizedMonth(month, language),
-        formatMoney(payment.amount, config.currency, language),
-        `${config.appUrl}/admin/payments?month=${encodeURIComponent(month)}&serviceId=${encodeURIComponent(service.id || '')}&highlight=${payment.id}`,
-        service && service.name,
-        language
-      );
-    } catch (err) {
-      console.error(`[pay] ${name} esuat:`, err.message);
-    }
-  }));
-}
+const paymentNotifications = createPaymentNotifications({
+  db,
+  channels: { telegram, discord },
+  async send(channel, payment) {
+    const member = db.getMember(payment.memberId) || { name: payment.memberName };
+    const service = serviceForPayment(payment);
+    const month = payment.month;
+    const language = appLanguage();
+    return channel.notifyPaymentReported(
+      member,
+      localizedMonth(month, language),
+      formatMoney(payment.amount, config.currency, language),
+      `${config.appUrl}/admin/payments?month=${encodeURIComponent(month)}&serviceId=${encodeURIComponent(service.id || '')}&highlight=${payment.id}`,
+      service.name,
+      language
+    );
+  },
+});
 
 // -------------------------------------------------------------
 // Admin - login
@@ -611,7 +614,7 @@ app.get('/admin/payments', requireAdmin, (req, res) => {
   });
 });
 
-app.post('/admin/payments/advance', requireAdmin, (req, res) => {
+app.post('/admin/payments/advance', requireAdmin, async (req, res) => {
   const member = db.getMember(String(req.body.memberId || ''));
   const service = db.getService(String(req.body.serviceId || ''));
   const month = String(req.body.month || '');
@@ -629,14 +632,13 @@ app.post('/admin/payments/advance', requireAdmin, (req, res) => {
     payment.month <= endMonth && (payment.endMonth || payment.month) >= month
   );
   if (overlap) return res.redirect(`/admin/payments?month=${encodeURIComponent(month)}&serviceId=${encodeURIComponent(service.id)}&err=perioadaOcupata`);
-  const payment = db.createPayment({ member, service, month, months, amount: db.multiplyAmount(membership.amount, months) });
-  db.setPaymentStatus(payment.id, 'confirmed');
+  const payment = db.createPayment({ member, service, month, months, amount: db.multiplyAmount(membership.amount, months), confirmed: true });
   const successMessage = appLanguage() === 'en'
     ? 'Advance payment recorded and confirmed.'
     : 'Plata în avans a fost înregistrată și confirmată.';
   const redirectUrl = `/admin/payments?month=${encodeURIComponent(month)}&serviceId=${encodeURIComponent(service.id)}&msg=${encodeURIComponent(successMessage)}`;
   if (config.sendConfirmToMember && member.active) {
-    sendConfirmEmail(member, month, { service, amount: payment.amount, endMonth: payment.endMonth }).catch((err) =>
+    await sendConfirmEmail(member, month, { service, amount: payment.amount, endMonth: payment.endMonth }).catch((err) =>
       console.error('[confirm] email utilizator esuat:', err.message)
     );
   }
@@ -657,7 +659,7 @@ app.post('/admin/payments/:id/confirm', requireAdmin, async (req, res) => {
   const service = serviceForPayment(payment);
   const member = db.getMember(payment.memberId);
   if (newlyConfirmed && config.sendConfirmToMember && member && member.active) {
-    sendConfirmEmail(member, payment.month, { service, amount: payment.amount, endMonth: payment.endMonth || payment.month }).catch((err) =>
+    await sendConfirmEmail(member, payment.month, { service, amount: payment.amount, endMonth: payment.endMonth || payment.month }).catch((err) =>
       console.error('[confirm] email utilizator esuat:', err.message)
     );
   }
@@ -696,9 +698,19 @@ const server = app.listen(config.port, () => {
   console.log(`[server] panou admin: http://localhost:${config.port}/admin`);
 });
 
-const shutdown = coordinateShutdown(server, stopScheduler, releaseDataLock, err => {
+let removeSignalHandlers = () => {};
+const shutdown = coordinateShutdown(server, async () => {
+  await Promise.all([stopScheduler(), paymentNotifications.stop()]);
+}, () => {
+  releaseDataLock();
+  removeSignalHandlers();
+}, err => {
   console.error('[shutdown] scheduler drain failed; data lock retained:', err.message);
 });
+removeSignalHandlers = installShutdownSignals(shutdown, process, err => {
+  console.error('[shutdown] drain failed; send another signal to retry:', err.message);
+});
 startScheduler();
+paymentNotifications.start();
 
 module.exports = { app, server, shutdown };

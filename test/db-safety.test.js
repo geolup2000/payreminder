@@ -66,7 +66,7 @@ test('atomic writes use unique exclusive restrictive temporary files and clean u
     assert.equal(mode, 0o600);
     assert.equal(flag, 'wx');
   }
-  assert.equal(fs.statSync(path.join(dir, 'settings.json')).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(dir, 'settings.json')).mode & 0o777, 0o600);
   wrappedFs.renameSync = () => { throw new Error('rename failed'); };
   assert.throws(() => db.updateSettings({ a: 3 }), /rename failed/);
   assert.equal(db.getSettings().a, 2);
@@ -96,7 +96,7 @@ test('lifetime directory lock excludes another process and releases on exit', t 
   const script = `const fs=require('fs'),vm=require('vm'),path=require('path');
     const file=${JSON.stringify(sourcePath)};
     const ctx={require:require('module').createRequire(file),__dirname:${JSON.stringify(path.join(path.dirname(dir), 'src'))},module:{exports:{}},process};
-    vm.runInNewContext(fs.readFileSync(file,'utf8'),ctx);ctx.module.exports.acquireDataLock();`;
+    vm.runInNewContext(fs.readFileSync(file,'utf8'),ctx);const release=ctx.module.exports.acquireDataLock();`;
   const blocked = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
   assert.notEqual(blocked.status, 0);
   assert.match(blocked.stderr, /lock|already running/i);
@@ -104,8 +104,12 @@ test('lifetime directory lock excludes another process and releases on exit', t 
   const acquired = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
   assert.equal(acquired.status, 0, acquired.stderr);
   assert.equal(fs.existsSync(path.join(dir, '.payreminder.lock')), false);
-  const terminated = spawnSync(process.execPath, ['-e', script + `setImmediate(() => process.kill(process.pid, 'SIGTERM')); setInterval(() => {}, 1000);`], { encoding: 'utf8', timeout: 3000 });
-  assert.equal(terminated.status, 143, terminated.stderr);
+  const terminated = spawnSync(process.execPath, ['-e', script + `
+    const {installShutdownSignals}=require(path.join(path.dirname(file),'shutdown'));
+    installShutdownSignals(async()=>{await new Promise(resolve=>setTimeout(resolve,20));release();});
+    setImmediate(() => ${process.platform === 'win32' ? "process.emit('SIGTERM')" : "process.kill(process.pid, 'SIGTERM')"});
+    `], { encoding: 'utf8', timeout: 3000 });
+  assert.equal(terminated.status, 0, terminated.stderr);
   assert.equal(fs.existsSync(path.join(dir, '.payreminder.lock')), false);
 });
 

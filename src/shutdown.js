@@ -33,4 +33,31 @@ function coordinateShutdown(server, stopScheduler, releaseDataLock, onError = co
   };
 }
 
-module.exports = { coordinateShutdown };
+// Keep the process alive on drain failure so the lock is retained and a later
+// signal can retry. Never let a second signal bypass the current drain.
+function installShutdownSignals(shutdown, processRef = process, onError = console.error) {
+  let running;
+  let keepAlive;
+  const handle = () => {
+    if (running) return;
+    keepAlive ||= setInterval(() => {}, 1000);
+    running = Promise.resolve().then(shutdown).then(() => {
+      cleanup();
+      processRef.exit(0);
+    }).catch(error => {
+      running = undefined;
+      onError(error);
+    });
+  };
+  function cleanup() {
+    clearInterval(keepAlive);
+    keepAlive = undefined;
+    processRef.removeListener('SIGINT', handle);
+    processRef.removeListener('SIGTERM', handle);
+  }
+  processRef.on('SIGINT', handle);
+  processRef.on('SIGTERM', handle);
+  return cleanup;
+}
+
+module.exports = { coordinateShutdown, installShutdownSignals };

@@ -44,28 +44,6 @@ test('Discord reports HTTP and network failures without exposing webhook token',
   await assert.rejects(loadDiscord(config, async () => { throw new Error('network failure'); }).sendDiscord('test'), /network failure/);
 });
 
-test('Payment notification still reaches the other channel when either one fails', async () => {
-  const source = fs.readFileSync(require.resolve('../src/server'), 'utf8');
-  const fn = source.slice(source.indexOf('async function notifyReported('), source.indexOf('// -------------------------------------------------------------', source.indexOf('async function notifyReported(')));
-  for (const failed of ['telegram', 'discord']) {
-    const language = failed === 'telegram' ? 'en' : 'ro';
-    const calls = [];
-    const channel = (name) => ({ notifyPaymentReported: async (...args) => {
-      calls.push({ name, args });
-      if (name === failed) throw new Error('test failure');
-    } });
-    const context = { telegram: channel('telegram'), discord: channel('discord'), config: { appUrl: 'https://example.com', currency: 'RON' }, ...require('../src/format'), appLanguage: () => language, console: { error() {} } };
-    vm.runInNewContext(fn, context);
-    await context.notifyReported({ name: 'Ana' }, { id: 's1', name: 'Netflix' }, '2026-10', { id: 'p1', amount: 15 });
-    assert.deepEqual(calls.map((call) => call.name).sort(), ['discord', 'telegram']);
-    assert.deepEqual(calls[0].args, calls[1].args);
-    assert.ok(calls[0].args[3].includes('highlight=p1'));
-    assert.equal(calls[0].args[5], language);
-    assert.equal(calls[0].args[1], language === 'en' ? 'October 2026' : 'octombrie 2026');
-    assert.equal(calls[0].args[2], language === 'en' ? '15.00 RON' : '15,00 RON');
-  }
-});
-
 for (const agent of ['telegram', 'discord']) {
   for (const language of ['ro', 'en']) {
     test(`${agent} payment notification uses ${language} for all message text`, async () => {

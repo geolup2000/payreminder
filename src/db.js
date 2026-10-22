@@ -113,8 +113,6 @@ function acquireDataLock() {
     throw error;
   }
   fs.closeSync(fd);
-  const onInterrupt = () => process.exit(130);
-  const onTerminate = () => process.exit(143);
   const release = () => {
     try {
       const current = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -123,15 +121,11 @@ function acquireDataLock() {
       if (error.code !== 'ENOENT') throw error;
     } finally {
       process.removeListener('exit', release);
-      process.removeListener('SIGINT', onInterrupt);
-      process.removeListener('SIGTERM', onTerminate);
       releaseDataLock = undefined;
     }
   };
   releaseDataLock = release;
   process.once('exit', release);
-  process.once('SIGINT', onInterrupt);
-  process.once('SIGTERM', onTerminate);
   return release;
 }
 
@@ -462,7 +456,7 @@ function getPaymentByMemberServiceMonth(memberId, serviceId, month) {
   );
 }
 
-function createPayment({ member, service, month, months = 1, amount }) {
+function createPayment({ member, service, month, months = 1, amount, confirmed = false, reported = false }) {
   const payments = getPayments();
   const actualService = service || getServiceForMember(member);
   const fallbackMembership = (member.memberships && member.memberships[0]) || {};
@@ -481,9 +475,10 @@ function createPayment({ member, service, month, months = 1, amount }) {
     endMonth,
     months: count,
     amount: normalizeAmount(amount),
-    status: 'pending',
+    status: confirmed ? 'confirmed' : 'pending',
     createdAt: nowIso(),
-    confirmedAt: null,
+    confirmedAt: confirmed ? nowIso() : null,
+    ...(reported ? { reportNotifications: { telegram: 'pending', discord: 'pending' } } : {}),
   };
   payments.push(payment);
   savePayments(payments);
@@ -498,6 +493,15 @@ function setPaymentStatus(id, status) {
   payments[index].confirmedAt = status === 'confirmed' ? payments[index].confirmedAt || nowIso() : null;
   savePayments(payments);
   return payments[index];
+}
+
+function markPaymentNotificationSent(id, channel) {
+  if (!['telegram', 'discord'].includes(channel)) throw new TypeError('Invalid notification channel');
+  const payments = getPayments();
+  const payment = payments.find(payment => payment.id === id);
+  if (!payment) return;
+  payment.reportNotifications = { ...payment.reportNotifications, [channel]: 'sent' };
+  savePayments(payments);
 }
 
 function deletePayment(id) {
@@ -601,6 +605,7 @@ module.exports = {
   getPaymentByMemberServiceMonth,
   createPayment,
   setPaymentStatus,
+  markPaymentNotificationSent,
   deletePayment,
   markListConfirmed,
   getSettings,

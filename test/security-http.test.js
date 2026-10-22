@@ -5,11 +5,11 @@ const path = require('node:path');
 
 const { createRequire, Module } = require('node:module');
 
-async function fixture(t, overrides = {}, schedulerOverrides = {}) {
-  const root = fs.mkdtempSync(path.join(process.env.TMPDIR || '/home/hermes/.hermes/cache/scratch', 'payreminder-http-'));
+async function fixture(t, overrides = {}, schedulerOverrides = {}, dependencyOverrides = {}) {
+  const root = fs.mkdtempSync(path.join(process.env.TMPDIR || require('node:os').tmpdir(), 'payreminder-http-'));
   const project = path.join(__dirname, '..');
   for (const dir of ['src', 'views', 'public']) fs.cpSync(path.join(project, dir), path.join(root, dir), { recursive: true });
-  fs.symlinkSync(path.join(project, 'node_modules'), path.join(root, 'node_modules'), 'dir');
+  fs.symlinkSync(path.join(project, 'node_modules'), path.join(root, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   const localRequire = createRequire(path.join(root, 'src/server.js'));
   const db = localRequire('./db');
   const calls = { reported: 0, confirmed: 0, tests: 0, validated: 0, locked: 0 };
@@ -23,6 +23,7 @@ async function fixture(t, overrides = {}, schedulerOverrides = {}) {
     './scheduler': { startScheduler() {}, stopScheduler: async () => {}, sendRemindersTo: async () => ({ sent: 0, skipped: 0 }), ...schedulerOverrides },
     './notification-check': { testNotification: async () => { calls.tests++; return { status: 200, body: { ok: true } }; } },
     './notification-settings': { getNotificationSettings: () => ({ telegram: {}, discord: {} }), notificationSettingsFromBody: () => ({}) },
+    ...dependencyOverrides,
   };
   const loaded = new Module(path.join(root, 'src/server.js'));
   loaded.filename = path.join(root, 'src/server.js');
@@ -30,7 +31,7 @@ async function fixture(t, overrides = {}, schedulerOverrides = {}) {
   loaded._compile(fs.readFileSync(loaded.filename, 'utf8'), loaded.filename);
   const { server } = loaded.exports;
   await new Promise((resolve) => server.listening ? resolve() : server.once('listening', resolve));
-  t.after(async () => { await new Promise((resolve) => server.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { await loaded.exports.shutdown(); fs.rmSync(root, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const request = (url, options = {}) => fetch(base + url, { redirect: 'manual', ...options });
   async function login() {
@@ -72,6 +73,45 @@ test('advance payments multiply decimal amounts without binary floating-point ov
   assert.equal(response.status, 302);
   assert.equal(f.db.getPayments().length, 1);
   assert.equal(f.db.getPayments()[0].amount, 0.3);
+  assert.equal(f.db.getPayments()[0].status, 'confirmed');
+  assert.ok(f.db.getPayments()[0].confirmedAt);
+});
+
+test('a failed payment channel retries on repeated reports without resending the successful channel', async t => {
+  let telegramCalls = 0, discordCalls = 0;
+  const f = await fixture(t, {}, {}, {
+    './telegram': { notifyPaymentReported: async () => { if (++telegramCalls === 1) throw new Error('offline'); } },
+    './discord': { notifyPaymentReported: async () => { discordCalls++; } },
+  });
+  const service = f.db.getServices()[0];
+  const member = f.db.createMember({ name: 'Retry', email: 'retry@example.test', memberships: [{ serviceId: service.id, amount: 10 }] });
+  const report = () => f.request(`/p/${member.token}/pay`, { method: 'POST', body: new URLSearchParams({ serviceId: service.id }) });
+  assert.equal((await report()).status, 302);
+  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'pending', discord: 'sent' });
+  await Promise.all([report(), report()]);
+  assert.equal(f.db.getPayments().length, 1);
+  assert.equal(telegramCalls, 2);
+  assert.equal(discordCalls, 1);
+  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'sent', discord: 'sent' });
+});
+
+test('reported notification messages retain payment details and selected language', async t => {
+  for (const language of ['ro', 'en']) {
+    const args = [];
+    const channel = { notifyPaymentReported: async (...values) => { args.push(values); } };
+    const f = await fixture(t, {}, {}, { './telegram': channel, './discord': channel });
+    f.db.updateSettings({ language });
+    const service = f.db.getServices()[0];
+    const member = f.db.createMember({ name: 'Ana', email: 'ana@example.test', memberships: [{ serviceId: service.id, amount: 15 }] });
+    await f.request(`/p/${member.token}/pay`, { method: 'POST', body: new URLSearchParams({ serviceId: service.id }) });
+    const payment = f.db.getPayments()[0];
+    assert.equal(args.length, 2);
+    assert.deepEqual(args[0], args[1]);
+    assert.equal(args[0][1], require('../src/format').localizedMonth(payment.month, language));
+    assert.equal(args[0][2], language === 'en' ? '15.00 RON' : '15,00 RON');
+    assert.ok(args[0][3].includes(`highlight=${payment.id}`));
+    assert.equal(args[0][5], language);
+  }
 });
 
 test('HTTP member amounts reject invalid negative and overprecision input without writing', async (t) => {
@@ -104,6 +144,30 @@ test('repeated payment confirmations send only one email and preserve confirmedA
   assert.equal((await auth.post(`/admin/payments/${payment.id}/confirm`)).status, 302);
   assert.equal(f.calls.confirmed, 1);
   assert.equal(f.db.getPayment(payment.id).confirmedAt, first);
+});
+
+test('shutdown waits for confirmation email requests before releasing the lock', async t => {
+  let finish, started;
+  const gate = new Promise(resolve => { finish = resolve; });
+  const sending = new Promise(resolve => { started = resolve; });
+  const f = await fixture(t, {}, {}, {
+    './mailer': { sendConfirmEmail: async () => { started(); await gate; } },
+  });
+  const service = f.db.getServices()[0];
+  const member = f.db.createMember({ name: 'Drain', email: 'drain@example.test', memberships: [{ serviceId: service.id, amount: 10 }] });
+  const payment = f.db.createPayment({ member, service, month: '2026-10', amount: 10 });
+  const auth = await f.login();
+  const request = auth.post(`/admin/payments/${payment.id}/confirm`);
+  try {
+    await sending;
+    const closing = f.shutdown();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(fs.existsSync(path.join(f.root, 'data/.payreminder.lock')), true);
+    finish();
+    assert.equal((await request).status, 302);
+    await closing;
+    assert.equal(fs.existsSync(path.join(f.root, 'data/.payreminder.lock')), false);
+  } finally { finish(); }
 });
 
 test('repeated pending payment reports create one payment and notify each channel once', async (t) => {

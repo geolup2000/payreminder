@@ -201,6 +201,7 @@ After=network.target
 [Service]
 WorkingDirectory=$APP_DIR
 ExecStart=$NODE_BIN src/server.js
+TimeoutStopSec=infinity
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production

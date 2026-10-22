@@ -6,13 +6,40 @@ const os = require('node:os');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const sourcePath = require.resolve('../src/db');
-function fixture(t) {
+function fixture(t, overrides = {}) {
   const root = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'payreminder-money-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const ctx = { require: createRequire(sourcePath), __dirname: path.join(root, 'src'), module: { exports: {} }, process };
+  const ctx = { require: createRequire(sourcePath), __dirname: path.join(root, 'src'), module: { exports: {} }, process, ...overrides };
   vm.runInNewContext(fs.readFileSync(sourcePath, 'utf8'), ctx);
   return { db: ctx.module.exports, dir: path.join(root, 'data') };
 }
+
+test('advance creation commits confirmed state once and failed writes leave the previous payments intact', t => {
+  const realRequire = createRequire(sourcePath);
+  const wrappedFs = { ...fs };
+  const { db, dir } = fixture(t, { require: name => name === 'fs' ? wrappedFs : realRequire(name) });
+  const service = db.getServices()[0];
+  const member = db.createMember({ name: 'Atomic', email: 'atomic@example.test', memberships: [{ serviceId: service.id, amount: 10 }] });
+  const file = path.join(dir, 'payments.json');
+  let writes = 0, fail = false;
+  wrappedFs.renameSync = (a, b) => {
+    if (b === file) { writes++; if (fail) throw new Error('disk failure'); }
+    return fs.renameSync(a, b);
+  };
+  const create = month => db.createPayment({ member, service, month, months: 3, amount: 30, confirmed: true });
+  const payment = create('2026-10');
+  assert.equal(writes, 1);
+  const original = fs.readFileSync(file, 'utf8');
+  assert.equal(JSON.parse(original)[0].status, 'confirmed');
+  assert.ok(payment.confirmedAt);
+  fail = true;
+  assert.throws(() => create('2027-01'), /disk failure/);
+  assert.equal(fs.readFileSync(file, 'utf8'), original);
+  fail = false;
+  create('2027-01');
+  assert.equal(db.getPayments().length, 2);
+  assert.ok(db.getPayments().every(payment => payment.status === 'confirmed' && payment.confirmedAt));
+});
 
 test('previously generated numeric prepaid residue is readable without rewriting legacy JSON', t => {
   const { db, dir } = fixture(t);
