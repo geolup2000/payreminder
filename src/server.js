@@ -8,6 +8,7 @@ const releaseDataLock = db.acquireDataLock();
 const { sendReminderEmail, sendConfirmEmail } = require('./mailer');
 const telegram = require('./telegram');
 const discord = require('./discord');
+const pushover = require('./pushover');
 const { testNotification } = require('./notification-check');
 const { getNotificationSettings, notificationSettingsFromBody } = require('./notification-settings');
 const { startScheduler, stopScheduler, sendRemindersTo } = require('./scheduler');
@@ -264,7 +265,7 @@ app.post('/p/:token/pay', async (req, res) => {
 
 const paymentNotifications = createPaymentNotifications({
   db,
-  channels: { telegram, discord },
+  channels: { telegram, discord, pushover },
   async send(channel, payment) {
     const member = db.getMember(payment.memberId) || { name: payment.memberName };
     const service = serviceForPayment(payment);
@@ -356,6 +357,7 @@ app.post('/admin/settings', requireAdmin, (req, res) => {
     return res.status(400).render('admin/settings', { saved: false, error: err.message, notifications: {
       telegram: { active: req.body.telegramActive === 'on', botToken: req.body.telegramBotToken || '', chatId: req.body.telegramChatId || '' },
       discord: { active: req.body.discordActive === 'on', webhookUrl: req.body.discordWebhookUrl || '', appName: req.body.discordAppName || config.appName },
+      pushover: { active: req.body.pushoverActive === 'on', apiToken: req.body.pushoverApiToken || '', userKey: req.body.pushoverUserKey || '' },
     } });
   }
   res.redirect('/admin/settings?saved=1');

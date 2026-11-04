@@ -6,6 +6,7 @@ function getNotificationSettings() {
   return {
     telegram: saved?.telegram || { active: config.telegramConfigured, ...config.telegram },
     discord: { appName: config.appName, ...(saved?.discord || { active: config.discordConfigured, ...config.discord }) },
+    pushover: { active: false, apiToken: '', userKey: '', ...saved?.pushover },
   };
 }
 
@@ -14,8 +15,12 @@ function notificationSettingsFromBody(body) {
   const notifications = {
     telegram: { active: body.telegramActive === 'on', botToken: value('telegramBotToken'), chatId: value('telegramChatId') },
     discord: { active: body.discordActive === 'on', webhookUrl: value('discordWebhookUrl'), appName: value('discordAppName') || config.appName },
+    pushover: { active: body.pushoverActive === 'on', apiToken: value('pushoverApiToken'), userKey: value('pushoverUserKey') },
   };
-  const { telegram, discord } = notifications;
+  const { telegram, discord, pushover } = notifications;
+  if (pushover.active && (!/^[A-Za-z0-9]{30}$/.test(pushover.apiToken) || !/^[A-Za-z0-9]{30}$/.test(pushover.userKey))) {
+    throw new Error('Completează API Token și User/Group Key pentru Pushover (30 de caractere alfanumerice fiecare).');
+  }
   if (discord.appName.length > 80) throw new Error('Numele aplicației poate avea maximum 80 de caractere.');
   if (telegram.active && (!telegram.botToken || !telegram.chatId)) {
     throw new Error('Completează tokenul botului și Chat ID pentru Telegram.');

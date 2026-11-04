@@ -35,10 +35,11 @@
         <select id="notificationAgent">
           <option value="telegram">Telegram</option>
           <option value="discord" <%= notifications.discord.active && !notifications.telegram.active ? 'selected' : '' %>>Discord</option>
+          <option value="pushover" <%= notifications.pushover.active && !notifications.telegram.active && !notifications.discord.active ? 'selected' : '' %>>Pushover</option>
         </select>
         <p class="muted">Poți activa separat fiecare agent. Modificările se aplică după salvare.</p>
       </div>
-      <% for (const agent of ['telegram', 'discord']) { %>
+      <% for (const agent of ['telegram', 'discord', 'pushover']) { %>
       <section data-agent="<%= agent %>">
         <div class="form-group">
           <label><input type="checkbox" name="<%= agent %>Active" data-active <%= notifications[agent].active ? 'checked' : '' %>> Activ</label>
@@ -53,7 +54,7 @@
             <label for="telegramChatId">ID-ul conversației Telegram</label>
             <input id="telegramChatId" name="telegramChatId" type="text" value="<%= notifications.telegram.chatId %>">
           </div>
-          <% } else { %>
+          <% } else if (agent === 'discord') { %>
           <div class="form-group">
             <label for="discordWebhookUrl">Adresa webhookului Discord</label>
             <input id="discordWebhookUrl" name="discordWebhookUrl" type="password" autocomplete="new-password" value="<%= notifications.discord.webhookUrl %>">
@@ -62,6 +63,15 @@
             <label for="discordAppName">Nume aplicație</label>
             <input id="discordAppName" name="discordAppName" type="text" maxlength="80" value="<%= notifications.discord.appName %>">
             <p class="muted">Imaginea de profil folosește automat iconul PayReminder.</p>
+          </div>
+          <% } else { %>
+          <div class="form-group">
+            <label for="pushoverApiToken">API Token Pushover</label>
+            <input id="pushoverApiToken" name="pushoverApiToken" type="password" autocomplete="new-password" maxlength="30" value="<%= notifications.pushover.apiToken %>">
+          </div>
+          <div class="form-group">
+            <label for="pushoverUserKey">User/Group Key Pushover</label>
+            <input id="pushoverUserKey" name="pushoverUserKey" type="password" autocomplete="new-password" maxlength="30" value="<%= notifications.pushover.userKey %>">
           </div>
           <% } %>
         </div>

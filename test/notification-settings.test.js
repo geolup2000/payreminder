@@ -44,3 +44,18 @@ test('Enabled agents require valid credentials and URLs', () => {
   }
   assert.throws(() => helper.notificationSettingsFromBody({ discordAppName: 'a'.repeat(81) }), /80/);
 });
+
+test('Pushover defaults to disabled for existing installations and preserves inactive credentials', () => {
+  assert.equal(load().getNotificationSettings().pushover.active, false);
+  const body = { pushoverApiToken: ` ${'a'.repeat(30)} `, pushoverUserKey: 'B'.repeat(30) };
+  const settings = load().notificationSettingsFromBody(body);
+  assert.equal(settings.pushover.active, false);
+  assert.equal(settings.pushover.apiToken, 'a'.repeat(30));
+  assert.equal(settings.pushover.userKey, 'B'.repeat(30));
+  assert.equal(load({ notifications: settings }).getNotificationSettings().pushover.apiToken, 'a'.repeat(30));
+  assert.equal(load().notificationSettingsFromBody({ ...body, pushoverActive: 'on' }).pushover.active, true);
+  for (const invalid of ['', 'a'.repeat(29), 'a'.repeat(31), '!'.repeat(30)]) {
+    assert.throws(() => load().notificationSettingsFromBody({ ...body, pushoverActive: 'on', pushoverApiToken: invalid }), /Pushover/);
+    assert.throws(() => load().notificationSettingsFromBody({ ...body, pushoverActive: 'on', pushoverUserKey: invalid }), /Pushover/);
+  }
+});

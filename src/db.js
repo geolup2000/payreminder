@@ -478,7 +478,7 @@ function createPayment({ member, service, month, months = 1, amount, confirmed =
     status: confirmed ? 'confirmed' : 'pending',
     createdAt: nowIso(),
     confirmedAt: confirmed ? nowIso() : null,
-    ...(reported ? { reportNotifications: { telegram: 'pending', discord: 'pending' } } : {}),
+    ...(reported ? { reportNotifications: { telegram: 'pending', discord: 'pending', pushover: 'pending' } } : {}),
   };
   payments.push(payment);
   savePayments(payments);
@@ -496,7 +496,7 @@ function setPaymentStatus(id, status) {
 }
 
 function markPaymentNotificationSent(id, channel) {
-  if (!['telegram', 'discord'].includes(channel)) throw new TypeError('Invalid notification channel');
+  if (!['telegram', 'discord', 'pushover'].includes(channel)) throw new TypeError('Invalid notification channel');
   const payments = getPayments();
   const payment = payments.find(payment => payment.id === id);
   if (!payment) return;

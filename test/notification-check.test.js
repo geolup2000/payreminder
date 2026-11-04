@@ -7,25 +7,26 @@ const { notificationSettingsFromBody } = require('../src/notification-settings')
 function load(send) {
   const context = { module: { exports: {} }, require: (name) => {
     if (name === './notification-settings') return { notificationSettingsFromBody };
-    return { sendTelegram: send, sendDiscord: send };
+    return { sendTelegram: send, sendDiscord: send, sendPushover: send };
   } };
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/notification-check'), 'utf8'), context);
   return context.module.exports.testNotification;
 }
 
-for (const agent of ['telegram', 'discord']) {
+for (const agent of ['telegram', 'discord', 'pushover']) {
   for (const language of ['ro', 'en']) {
     test(`${agent} test sends unsaved credentials and localized confirmation (${language})`, async () => {
       let sent;
       const check = load(async (message, settings) => { sent = { message, settings }; return { sent: true }; });
-      const result = await check({ agent, language, telegramBotToken: 'unsaved-token', telegramChatId: '123', discordWebhookUrl: 'https://discord.com/api/webhooks/123/token', discordAppName: 'My App' });
+      const result = await check({ agent, language, telegramBotToken: 'unsaved-token', telegramChatId: '123', discordWebhookUrl: 'https://discord.com/api/webhooks/123/token', discordAppName: 'My App', pushoverApiToken: 'a'.repeat(30), pushoverUserKey: 'b'.repeat(30) });
       assert.equal(result.status, 200);
       assert.equal(result.body.ok, true);
       assert.ok(sent.message.includes(language === 'en' ? 'notification settings work correctly' : 'setările notificărilor funcționează corect'));
       assert.ok(result.body.message.includes(language === 'en' ? 'successfully' : 'trimis'));
       assert.equal(sent.settings.active, true);
       if (agent === 'telegram') assert.equal(sent.settings.botToken, 'unsaved-token');
-      else assert.equal(sent.settings.appName, 'My App');
+      else if (agent === 'discord') assert.equal(sent.settings.appName, 'My App');
+      else { assert.equal(sent.settings.apiToken, 'a'.repeat(30)); assert.equal(sent.settings.userKey, 'b'.repeat(30)); }
     });
   }
 }
@@ -39,6 +40,9 @@ test('Validation errors are localized and do not send messages', async () => {
     assert.ok(result.body.message.includes(language === 'en' ? 'Enter the bot token' : 'Completează tokenul'));
     assert.equal((await check({ agent: 'discord', language, discordWebhookUrl: 'https://example.com' })).status, 400);
     assert.equal((await check({ agent: 'other', language })).status, 400);
+    const pushover = await check({ agent: 'pushover', language });
+    assert.equal(pushover.status, 400);
+    assert.ok(pushover.body.message.includes(language === 'en' ? 'Enter the Pushover' : 'Completează API Token'));
   }
 });
 

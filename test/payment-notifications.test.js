@@ -115,3 +115,28 @@ test('shutdown waits for accepted sends and rejects further deliveries', async (
   await Promise.all([sending, stopping]);
   assert.deepEqual(f.payment.reportNotifications, { telegram: 'sent', discord: 'sent' });
 });
+
+test('Pushover failures retry independently without resending successful channels or replaying old payments', async () => {
+  const payment = { id: 'new', reportNotifications: { telegram: 'pending', discord: 'pending', pushover: 'pending' } };
+  const old = { id: 'old', reportNotifications: { telegram: 'sent', discord: 'sent' } };
+  const calls = [];
+  let offline = true;
+  const service = createPaymentNotifications({
+    db: {
+      getPayments: () => [payment, old],
+      getPayment: id => id === payment.id ? payment : old,
+      markPaymentNotificationSent(id, channel) { assert.equal(id, 'new'); payment.reportNotifications[channel] = 'sent'; },
+    },
+    channels: { telegram: 'telegram', discord: 'discord', pushover: 'pushover' },
+    send: async channel => { calls.push(channel); if (channel === 'pushover' && offline) throw new Error('offline'); },
+    onError() {},
+  });
+  await service.retry();
+  assert.deepEqual(payment.reportNotifications, { telegram: 'sent', discord: 'sent', pushover: 'pending' });
+  offline = false;
+  await service.retry();
+  await service.retry('old');
+  assert.deepEqual(calls, ['telegram', 'discord', 'pushover', 'pushover']);
+  assert.equal(payment.reportNotifications.pushover, 'sent');
+  await service.stop();
+});

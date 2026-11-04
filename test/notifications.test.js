@@ -44,7 +44,7 @@ test('Discord reports HTTP and network failures without exposing webhook token',
   await assert.rejects(loadDiscord(config, async () => { throw new Error('network failure'); }).sendDiscord('test'), /network failure/);
 });
 
-for (const agent of ['telegram', 'discord']) {
+for (const agent of ['telegram', 'discord', 'pushover']) {
   for (const language of ['ro', 'en']) {
     test(`${agent} payment notification uses ${language} for all message text`, async () => {
       let payload;
@@ -53,19 +53,20 @@ for (const agent of ['telegram', 'discord']) {
           getNotificationSettings: () => ({
             telegram: { active: true, botToken: 'test', chatId: '123' },
             discord: { active: true, webhookUrl: 'https://discord.com/api/webhooks/123/test' },
+            pushover: { active: true, apiToken: 'a'.repeat(30), userKey: 'b'.repeat(30) },
           }),
         },
         module: { exports: {} }, URL, AbortSignal,
         console: { log() {} },
         fetch: async (url, options) => {
           payload = JSON.parse(options.body);
-          return { ok: true, json: async () => ({ ok: true }) };
+          return { ok: true, json: async () => ({ ok: true, status: 1 }) };
         },
       };
       vm.runInNewContext(fs.readFileSync(require.resolve(`../src/${agent}`), 'utf8'), context);
       const { localizedMonth, formatMoney } = require('../src/format');
       await context.module.exports.notifyPaymentReported({ name: 'Ana' }, localizedMonth('2026-10', language), formatMoney(15, 'RON', language), 'https://example.com/admin/payments', 'Netflix', language);
-      const text = payload.text || payload.content.replace(/\\([\\`*_{}\[\]()<>#+\-.!|~])/g, '$1');
+      const text = payload.message || payload.text || payload.content.replace(/\\([\\`*_{}\[\]()<>#+\-.!|~])/g, '$1');
       const expected = language === 'en'
         ? ['Payment reported', 'reported a payment for', 'Confirm after verification', 'October 2026', '15.00 RON']
         : ['Plată raportată', 'a notificat plata pentru', 'Confirmă după verificare', 'octombrie 2026', '15,00 RON'];
