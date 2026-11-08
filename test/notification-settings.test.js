@@ -11,6 +11,25 @@ function load(settings = {}) {
   return context.module.exports;
 }
 
+test('Gotify defaults to disabled, retains credentials and validates enabled local or proxy URLs', () => {
+  const helper = load();
+  assert.equal(helper.getNotificationSettings().gotify.active, false);
+  const body = { gotifyServerUrl: ' https://push.example.test/gotify/// ', gotifyAppToken: ' secret ' };
+  const saved = helper.notificationSettingsFromBody(body);
+  assert.equal(saved.gotify.active, false);
+  assert.equal(saved.gotify.serverUrl, 'https://push.example.test/gotify');
+  assert.equal(load({ notifications: saved }).getNotificationSettings().gotify.appToken, 'secret');
+  for (const gotifyServerUrl of ['http://192.168.1.2:8080', 'https://push.example.test/gotify']) {
+    assert.equal(helper.notificationSettingsFromBody({ ...body, gotifyServerUrl, gotifyActive: 'on' }).gotify.active, true);
+  }
+  for (const gotifyServerUrl of ['', 'invalid', 'file:///tmp/gotify', 'https://user:pass@example.test', 'https://example.test?token=secret', 'https://example.test/#fragment']) {
+    assert.throws(() => helper.notificationSettingsFromBody({ ...body, gotifyServerUrl, gotifyActive: 'on' }), /URL/);
+  }
+  for (const gotifyAppToken of ['', 'token with spaces', 'token\nheader']) {
+    assert.throws(() => helper.notificationSettingsFromBody({ ...body, gotifyAppToken, gotifyActive: 'on' }), /tokenul/);
+  }
+});
+
 test('Legacy configuration is used only until settings are saved', () => {
   assert.equal(load().getNotificationSettings().telegram.botToken, 'legacy');
   const settings = { notifications: { telegram: { active: false, botToken: 'saved', chatId: '456' }, discord: { active: false } } };

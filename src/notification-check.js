@@ -2,14 +2,15 @@ const { notificationSettingsFromBody } = require('./notification-settings');
 const { sendTelegram } = require('./telegram');
 const { sendDiscord } = require('./discord');
 const { sendPushover } = require('./pushover');
+const { sendGotify } = require('./gotify');
 
 async function testNotification(body) {
   const english = body.language === 'en';
   const agent = body.agent;
   const result = (status, message) => ({ status, body: { ok: status === 200, message } });
-  const transports = { telegram: sendTelegram, discord: sendDiscord, pushover: sendPushover };
+  const transports = { telegram: sendTelegram, discord: sendDiscord, pushover: sendPushover, gotify: sendGotify };
   if (!Object.hasOwn(transports, agent)) {
-    return result(400, english ? 'Choose Telegram, Discord or Pushover.' : 'Alege Telegram, Discord sau Pushover.');
+    return result(400, english ? 'Choose Telegram, Discord, Pushover or Gotify.' : 'Alege Telegram, Discord, Pushover sau Gotify.');
   }
   let settings;
   try {
@@ -18,11 +19,15 @@ async function testNotification(body) {
       telegramActive: 'on', telegramBotToken: body.telegramBotToken, telegramChatId: body.telegramChatId,
     } : agent === 'discord' ? {
       discordActive: 'on', discordWebhookUrl: body.discordWebhookUrl, discordAppName: body.discordAppName,
-    } : {
+    } : agent === 'pushover' ? {
       pushoverActive: 'on', pushoverApiToken: body.pushoverApiToken, pushoverUserKey: body.pushoverUserKey,
+    } : {
+      gotifyActive: 'on', gotifyServerUrl: body.gotifyServerUrl, gotifyAppToken: body.gotifyAppToken,
     })[agent];
   } catch (err) {
     const translations = {
+      'Introdu un URL HTTP(S) valid pentru serverul Gotify, fără date de acces, query sau fragment.': 'Enter a valid Gotify HTTP(S) server URL without credentials, query or fragment.',
+      'Completează tokenul aplicației Gotify, fără spații.': 'Enter the Gotify application token without spaces.',
       'Completează tokenul botului și Chat ID pentru Telegram.': 'Enter the bot token and Chat ID for Telegram.',
       'Introdu un URL valid pentru webhookul Discord.': 'Enter a valid Discord webhook URL.',
       'Completează API Token și User/Group Key pentru Pushover (30 de caractere alfanumerice fiecare).': 'Enter the Pushover API Token and User/Group Key (30 alphanumeric characters each).',
@@ -38,7 +43,7 @@ async function testNotification(body) {
     if (sent.skipped) throw new Error('Skipped');
     return result(200, english ? 'Test message sent successfully. Settings work correctly.' : 'Mesajul de test a fost trimis. Setările funcționează corect.');
   } catch (err) {
-    const channel = { telegram: 'Telegram', discord: 'Discord', pushover: 'Pushover' }[agent];
+    const channel = { telegram: 'Telegram', discord: 'Discord', pushover: 'Pushover', gotify: 'Gotify' }[agent];
     if (err.status) {
       return result(502, english
         ? `${channel} rejected the test (HTTP ${err.status}). Check the credentials and destination permissions.`

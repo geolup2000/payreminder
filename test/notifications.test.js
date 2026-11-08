@@ -44,13 +44,14 @@ test('Discord reports HTTP and network failures without exposing webhook token',
   await assert.rejects(loadDiscord(config, async () => { throw new Error('network failure'); }).sendDiscord('test'), /network failure/);
 });
 
-for (const agent of ['telegram', 'discord', 'pushover']) {
+for (const agent of ['telegram', 'discord', 'pushover', 'gotify']) {
   for (const language of ['ro', 'en']) {
     test(`${agent} payment notification uses ${language} for all message text`, async () => {
       let payload;
       const context = {
         require: (name) => name === './config' ? { appName: 'PayReminder' } : {
           getNotificationSettings: () => ({
+            gotify: { active: true, serverUrl: 'http://localhost:8080/gotify', appToken: 'secret' },
             telegram: { active: true, botToken: 'test', chatId: '123' },
             discord: { active: true, webhookUrl: 'https://discord.com/api/webhooks/123/test' },
             pushover: { active: true, apiToken: 'a'.repeat(30), userKey: 'b'.repeat(30) },

@@ -21,9 +21,10 @@ async function fixture(t, overrides = {}, schedulerOverrides = {}, dependencyOve
     './telegram': { notifyPaymentReported: async () => { calls.reported++; } },
     './discord': { notifyPaymentReported: async () => { calls.reported++; } },
     './pushover': { notifyPaymentReported: async () => ({ skipped: true }) },
+    './gotify': { notifyPaymentReported: async () => ({ skipped: true }) },
     './scheduler': { startScheduler() {}, stopScheduler: async () => {}, sendRemindersTo: async () => ({ sent: 0, skipped: 0 }), ...schedulerOverrides },
     './notification-check': { testNotification: async () => { calls.tests++; return { status: 200, body: { ok: true } }; } },
-    './notification-settings': { getNotificationSettings: () => ({ telegram: {}, discord: {}, pushover: {} }), notificationSettingsFromBody: () => ({}) },
+    './notification-settings': { getNotificationSettings: () => ({ telegram: {}, discord: {}, pushover: {}, gotify: {} }), notificationSettingsFromBody: () => ({}) },
     ...dependencyOverrides,
   };
   const loaded = new Module(path.join(root, 'src/server.js'));
@@ -88,12 +89,12 @@ test('a failed payment channel retries on repeated reports without resending the
   const member = f.db.createMember({ name: 'Retry', email: 'retry@example.test', memberships: [{ serviceId: service.id, amount: 10 }] });
   const report = () => f.request(`/p/${member.token}/pay`, { method: 'POST', body: new URLSearchParams({ serviceId: service.id }) });
   assert.equal((await report()).status, 302);
-  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'pending', discord: 'sent', pushover: 'pending' });
+  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'pending', discord: 'sent', pushover: 'pending', gotify: 'pending' });
   await Promise.all([report(), report()]);
   assert.equal(f.db.getPayments().length, 1);
   assert.equal(telegramCalls, 2);
   assert.equal(discordCalls, 1);
-  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'sent', discord: 'sent', pushover: 'pending' });
+  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'sent', discord: 'sent', pushover: 'pending', gotify: 'pending' });
 });
 
 test('Pushover reports persist and retry independently', async t => {
@@ -109,11 +110,56 @@ test('Pushover reports persist and retry independently', async t => {
   const member = f.db.createMember({ name: 'Pushover member', email: 'pushover@example.test', memberships: [{ serviceId: service.id, amount: 15 }] });
   const report = () => f.request(`/p/${member.token}/pay`, { method: 'POST', body: new URLSearchParams({ serviceId: service.id }) });
   assert.equal((await report()).status, 302);
-  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'sent', discord: 'sent', pushover: 'pending' });
+  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'sent', discord: 'sent', pushover: 'pending', gotify: 'pending' });
   assert.equal((await report()).status, 302);
-  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'sent', discord: 'sent', pushover: 'sent' });
+  assert.deepEqual(f.db.getPayments()[0].reportNotifications, { telegram: 'sent', discord: 'sent', pushover: 'sent', gotify: 'pending' });
   assert.equal(attempts, 2);
   assert.equal(f.calls.reported, 2);
+});
+
+test('Gotify reports persist and retry without replaying successful channels', async t => {
+  let attempts = 0;
+  const f = await fixture(t, {}, {}, {
+    './gotify': { notifyPaymentReported: async () => {
+      if (++attempts === 1) throw new Error('offline');
+      return { sent: true };
+    } },
+  });
+  const service = f.db.getServices()[0];
+  const member = f.db.createMember({ name: 'Gotify member', email: 'gotify@example.test', memberships: [{ serviceId: service.id, amount: 15 }] });
+  const report = () => f.request(`/p/${member.token}/pay`, { method: 'POST', body: new URLSearchParams({ serviceId: service.id }) });
+  assert.equal((await report()).status, 302);
+  assert.equal(f.db.getPayments()[0].reportNotifications.gotify, 'pending');
+  assert.equal((await report()).status, 302);
+  assert.equal(f.db.getPayments()[0].reportNotifications.gotify, 'sent');
+  assert.equal(attempts, 2);
+  assert.equal(f.calls.reported, 2);
+});
+
+test('Gotify settings save, render and retain submitted values after validation errors', async t => {
+  const { notificationSettingsFromBody } = require('../src/notification-settings');
+  let f;
+  f = await fixture(t, {}, {}, {
+    './notification-settings': {
+      notificationSettingsFromBody,
+      getNotificationSettings: () => ({ telegram: {}, discord: {}, pushover: {}, gotify: {}, ...f.db.getSettings().notifications }),
+    },
+  });
+  const auth = await f.login();
+  const body = { gotifyActive: 'on', gotifyServerUrl: 'http://localhost:8080/push/', gotifyAppToken: 'gotify-test-token' };
+  assert.equal((await auth.post('/admin/settings', body)).status, 302);
+  assert.deepEqual(f.db.getSettings().notifications.gotify, { active: true, serverUrl: 'http://localhost:8080/push', appToken: 'gotify-test-token' });
+  const response = await f.request('/admin/settings', { headers: auth.headers });
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /value="gotify" selected/);
+  assert.match(html, /name="gotifyAppToken"[^>]*value="gotify-test-token"/);
+  const invalid = await auth.post('/admin/settings', { ...body, gotifyServerUrl: 'invalid-url' });
+  assert.equal(invalid.status, 400);
+  const invalidHtml = await invalid.text();
+  assert.match(invalidHtml, /value="invalid-url"/);
+  assert.match(invalidHtml, /value="gotify-test-token"/);
+  assert.equal(f.db.getSettings().notifications.gotify.serverUrl, 'http://localhost:8080/push');
 });
 
 test('reported notification messages retain payment details and selected language', async t => {

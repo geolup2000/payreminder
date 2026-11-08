@@ -10,7 +10,7 @@ PayReminder does **not** charge cards or process payments. Members pay through t
 - Members can be assigned to multiple services, with a separate monthly amount for each.
 - Automatic and manual reminder emails. A member subscribed to several services receives one reminder email per service; each email links to the member's personal page.
 - A personal page where members can see their subscriptions, open the relevant payment link, and report a payment.
-- Optional Telegram, Discord and Pushover notifications when a member reports a payment, configured directly in **Admin → Settings** with a separate active switch for each agent.
+- Optional Telegram, Discord, Pushover and Gotify notifications when a member reports a payment, configured directly in **Admin → Settings** with a separate active switch for each agent.
 - Manual payment confirmation and optional confirmation emails to members.
 - Optional advance payments covering multiple consecutive months.
 - Romanian and English interface and email templates. Choose the language in **Admin → Settings**.
@@ -55,7 +55,7 @@ PayReminder does **not** charge cards or process payments. Members pay through t
 
 - Node.js 20 or newer and npm; Node.js 22 is recommended. Older versions are unsupported, including when installed through a distribution-package fallback.
 - Linux installation script: Debian or Ubuntu in an LXC container, with root access. Do not run the installer on the Proxmox host.
-- An SMTP account to send email. Telegram, Discord and Pushover notifications are optional.
+- An SMTP account to send email. Telegram, Discord, Pushover and Gotify notifications are optional.
 - For public access, a domain and an HTTPS reverse proxy such as Caddy or Nginx.
 
 ## Quick start
@@ -76,7 +76,7 @@ Copy-Item .env.example .env
 
 Before `npm start` (or `npm run dev`), edit `.env` with your preferred editor (`notepad .env` on Windows). Set a unique `ADMIN_PASSWORD` of at least 12 characters and a cryptographically random `SESSION_SECRET` of at least 32 characters, using a password manager or secure random generator. These fields are deliberately blank in `.env.example`; blank, short, and known example/default credentials cause startup to fail before the HTTP port opens. Do not put secrets in shell history, logs, screenshots, or Git. On Windows, restrict the file's permissions to the account running the app instead of using `chmod`.
 
-Set `APP_URL` to an HTTP(S) origin such as `https://reminder.example.com` (no credentials, path, query, or fragment), and configure your SMTP details. Without SMTP credentials, the app starts but does not send emails. Configure optional Telegram, Discord and Pushover notifications from **Admin → Settings → Notifications**; new installations do not need notification variables in `.env`.
+Set `APP_URL` to an HTTP(S) origin such as `https://reminder.example.com` (no credentials, path, query, or fragment), and configure your SMTP details. Without SMTP credentials, the app starts but does not send emails. Configure optional Telegram, Discord, Pushover and Gotify notifications from **Admin → Settings → Notifications**; new installations do not need notification variables in `.env`.
 
 Open:
 
@@ -139,7 +139,7 @@ The installer does not configure DNS, HTTPS, a reverse proxy, or firewall rules.
 - Use HTTPS for network access and protect the admin account with a unique password. Member personal URLs are bearer links: anyone holding a link can view/report that member's payments; do not publish them.
 - Admin state-changing requests require a CSRF token from the rendered form (or the `X-CSRF-Token` header). Scripts must retain the session/cookies and send a current token; missing or invalid tokens are rejected. Do not disable CSRF protection to work around stale forms; reload and sign in again if needed.
 - Normal SIGTERM/SIGINT shutdown waits for HTTP requests and accepted deliveries before releasing the data lock. The generated systemd unit uses `TimeoutStopSec=infinity` so a long campaign is not forcibly killed during this drain (rerun the installer to update an existing unit). If persistence fails during shutdown, the process keeps the lock and logs the error; restore storage access and send another SIGTERM/SIGINT to the process to retry shutdown.
-- New payment reports persist pending Telegram/Discord/Pushover notifications with the payment. Failed or disabled channels retry on startup, every minute, and when the report is submitted again; channels recorded as sent are skipped. Older payments without delivery records are not replayed. A forced kill or power loss after a provider accepts a message but before its success is saved can still cause a duplicate on restart.
+- New payment reports persist pending Telegram/Discord/Pushover/Gotify notifications with the payment. Failed or disabled channels retry on startup, every minute, and when the report is submitted again; channels recorded as sent are skipped. Older payments without delivery records are not replayed. A forced kill or power loss after a provider accepts a message but before its success is saved can still cause a duplicate on restart.
 - JSON storage is **single-writer**: run exactly one application process against a data directory. Do not use Node cluster mode, multiple replicas/containers sharing the directory, or a second manual process alongside systemd. File writes are not a substitute for a multi-process database.
 - The installer preserves existing configuration; it does not automatically migrate insecure credentials. Replace insecure/legacy `ADMIN_PASSWORD` and `SESSION_SECRET` yourself before restarting an upgraded application. Rotating the session secret invalidates existing sessions. Back up `.env` and `data/` privately first.
 
@@ -172,16 +172,17 @@ The app uses STARTTLS (`requireTLS`) and a non-secure SMTP connection upgraded w
 
 ### Configure notifications (optional)
 
-Open **Admin → Settings → Notifications**, choose **Telegram**, **Discord** or **Pushover**, and check **Active** to show its configuration fields. Each agent is enabled independently, so all three can be active. Unchecking Active hides the fields and preserves their values. Save to apply changes immediately, without restarting.
+Open **Admin → Settings → Notifications**, choose **Telegram**, **Discord**, **Pushover** or **Gotify**, and check **Active** to show its configuration fields. Each agent is enabled independently, so all four can be active. Unchecking Active hides the fields and preserves their values. Save to apply changes immediately, without restarting.
 
 - **Telegram:** create a bot with `@BotFather`, copy its token into `TELEGRAM_BOT_TOKEN`, and enter the destination chat ID in `TELEGRAM_CHAT_ID`. Make sure the bot can send messages to that chat.
 - **Discord:** create a webhook under the channel's **Integrations → Webhooks** settings and enter `DISCORD_WEBHOOK_URL`. Set **Application name** to the sender name shown in Discord (up to 80 characters; defaults to `PayReminder`). The avatar automatically uses the PayReminder favicon, served as a PNG at `APP_URL/favicon.png`. Set `APP_URL` to a publicly accessible HTTPS address so Discord can load it; no image URL needs to be entered.
 
+- **Gotify:** create an application in your Gotify server’s **Apps** tab, then enter the server base URL (for example `https://gotify.example.com`, including any reverse-proxy path) and its application token in **Admin → Settings → Notifications → Gotify**. Enable **Active**, send a test message and save. HTTP and HTTPS are supported, including local servers. Messages use priority 5. See the [Gotify push documentation](https://gotify.net/docs/pushmsg).
 - **Pushover:** register an application in your [Pushover dashboard](https://pushover.net/) to obtain its API Token, then copy your User Key (or a delivery group key) into **User/Group Key**. Both keys contain 30 alphanumeric characters and are case-sensitive. Messages go to the active devices associated with that user/group. See the [Pushover Message API](https://pushover.net/api).
 
 Configuration is stored in `data/settings.json`. Existing notification variables in `.env` are used until you first save these settings; afterward, the saved settings take priority and those variables can be removed from `.env`. Include settings.json in backups and keep it private: it contains notification credentials.
 
-The agent selector only changes which configuration is displayed; it does not disable the other agents. To enable multiple agents, select Telegram, check **Active** and fill in its fields, then repeat for Discord and/or Pushover. Click **Save settings** to save all configurations together. To disable an agent, select it, uncheck **Active**, and save. Its credentials remain available if you enable it again later. Active Telegram requires both fields, active Discord requires a valid Discord webhook URL, and active Pushover requires a 30-character alphanumeric API token and user/group key.
+The agent selector only changes which configuration is displayed; it does not disable the other agents. To enable multiple agents, select Telegram, check **Active** and fill in its fields, then repeat for Discord, Pushover and/or Gotify. Click **Save settings** to save all configurations together. To disable an agent, select it, uncheck **Active**, and save. Its credentials remain available if you enable it again later. Active Telegram requires both fields, active Discord requires a valid Discord webhook URL, active Pushover requires a 30-character alphanumeric API token and user/group key, and active Gotify requires an HTTP(S) server URL and an application token.
 
 Each active agent has a **Send test message** button. The test uses the current form values without saving them and sends a confirmation message in the language selected in the form. The page shows success or a localized error if validation or delivery fails. Save settings after a successful test to apply the configuration to future payment notifications.
 
@@ -202,7 +203,7 @@ No payment links are preconfigured. Verify each service's payment URL before inv
 1. At the configured day and hour for an active service, PayReminder checks for members who are active, subscribed to that service, and have no payment recorded for the current month.
 2. It sends each matching member a service-specific email with the amount and a link to their personal page.
 3. The member opens the service's payment link and reports the payment from their personal page.
-4. PayReminder optionally sends Telegram, Discord and/or Pushover notifications to the admin. The notification is informational; it does not verify the transaction.
+4. PayReminder optionally sends Telegram, Discord, Pushover and/or Gotify notifications to the admin. The notification is informational; it does not verify the transaction.
 5. The admin checks the payment with the service provider and confirms it in **Payments** or from the dashboard.
 6. If enabled, PayReminder sends the member a confirmation email.
 
@@ -218,7 +219,7 @@ Advance payments are recorded as confirmed and cover the selected consecutive mo
 | `/admin/services` | Add, edit, activate/deactivate, and schedule services. |
 | `/admin/members` | Manage members, service assignments, amounts, and personal links. |
 | `/admin/payments` | Filter payment reports, confirm or remove records, and record advance payments. |
-| `/admin/settings` | Choose the application and email language; configure and activate Telegram, Discord and Pushover notifications, including the Discord application name and automatic favicon avatar. |
+| `/admin/settings` | Choose the application and email language; configure and activate Telegram, Discord, Pushover and Gotify notifications, including the Discord application name and automatic favicon avatar. |
 
 ## Reverse proxy and login protection
 

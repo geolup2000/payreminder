@@ -36,10 +36,11 @@
           <option value="telegram">Telegram</option>
           <option value="discord" <%= notifications.discord.active && !notifications.telegram.active ? 'selected' : '' %>>Discord</option>
           <option value="pushover" <%= notifications.pushover.active && !notifications.telegram.active && !notifications.discord.active ? 'selected' : '' %>>Pushover</option>
+          <option value="gotify" <%= notifications.gotify.active && !notifications.telegram.active && !notifications.discord.active && !notifications.pushover.active ? 'selected' : '' %>>Gotify</option>
         </select>
         <p class="muted">Poți activa separat fiecare agent. Modificările se aplică după salvare.</p>
       </div>
-      <% for (const agent of ['telegram', 'discord', 'pushover']) { %>
+      <% for (const agent of ['telegram', 'discord', 'pushover', 'gotify']) { %>
       <section data-agent="<%= agent %>">
         <div class="form-group">
           <label><input type="checkbox" name="<%= agent %>Active" data-active <%= notifications[agent].active ? 'checked' : '' %>> Activ</label>
@@ -64,7 +65,7 @@
             <input id="discordAppName" name="discordAppName" type="text" maxlength="80" value="<%= notifications.discord.appName %>">
             <p class="muted">Imaginea de profil folosește automat iconul PayReminder.</p>
           </div>
-          <% } else { %>
+          <% } else if (agent === 'pushover') { %>
           <div class="form-group">
             <label for="pushoverApiToken">API Token Pushover</label>
             <input id="pushoverApiToken" name="pushoverApiToken" type="password" autocomplete="new-password" maxlength="30" value="<%= notifications.pushover.apiToken %>">
@@ -72,6 +73,15 @@
           <div class="form-group">
             <label for="pushoverUserKey">User/Group Key Pushover</label>
             <input id="pushoverUserKey" name="pushoverUserKey" type="password" autocomplete="new-password" maxlength="30" value="<%= notifications.pushover.userKey %>">
+          </div>
+          <% } else { %>
+          <div class="form-group">
+            <label for="gotifyServerUrl">Adresa serverului Gotify</label>
+            <input id="gotifyServerUrl" name="gotifyServerUrl" type="url" placeholder="https://gotify.example.com" value="<%= notifications.gotify.serverUrl %>">
+          </div>
+          <div class="form-group">
+            <label for="gotifyAppToken">Tokenul aplicației Gotify</label>
+            <input id="gotifyAppToken" name="gotifyAppToken" type="password" autocomplete="new-password" value="<%= notifications.gotify.appToken %>">
           </div>
           <% } %>
         </div>
